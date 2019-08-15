@@ -27,14 +27,18 @@ type BasicBroker struct {
 func (b *BasicBroker) initKeys() {
 	if b.keys.RWMutex == nil {
 		b.keys.RWMutex = new(sync.RWMutex)
+		b.keys.Lock()
 		b.keys.db = make(map[string]OnMessageFn)
+		b.keys.Unlock()
 	}
 }
 
 func (b *BasicBroker) initSubscriptions() {
 	if b.subscriptions.RWMutex == nil {
 		b.subscriptions.RWMutex = new(sync.RWMutex)
+		b.subscriptions.Lock()
 		b.subscriptions.db = make(map[string][]Subscription)
+		b.subscriptions.Unlock()
 	}
 }
 
