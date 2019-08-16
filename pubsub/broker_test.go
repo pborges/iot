@@ -21,3 +21,26 @@ func TestBasicBroker_cancelSubscription(t *testing.T) {
 		t.Error("expected error got nothing")
 	}
 }
+
+func TestBasicBroker_Create(t *testing.T) {
+	b := &BasicBroker{}
+	onCreateCalled := false
+	if _, err := b.Create("test", func(m Message) error {
+		onCreateCalled = true
+		return nil
+	}); err != nil {
+		t.Error(err)
+	}
+
+	if _, ok := b.publications.db["test"]; !ok {
+		t.Error("key not found")
+	}
+
+	if err, _ := b.Publish("test", true); err != nil {
+		t.Error(err)
+	}
+
+	if !onCreateCalled {
+		t.Error("create onMessage was not called")
+	}
+}

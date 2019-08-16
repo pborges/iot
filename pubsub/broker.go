@@ -6,15 +6,19 @@ import (
 )
 
 type Broker interface {
-	Create(key string, fn OnMessageFn) error
+	Create(key string, fn OnMessageFn) (Publication, error)
 	Publish(key string, value interface{}) (error, []SubscriptionReport)
 	Subscribe(filter string, fn OnMessageFn) CancelableSubscription
+
+	publish(key string, value interface{}) []SubscriptionReport
+	cancelPublication(id string)
+	cancelSubscription(id string)
 }
 
 type OnMessageFn func(Message) error
 
 type BasicBroker struct {
-	keys struct {
+	publications struct {
 		db map[string]OnMessageFn
 		*sync.RWMutex
 	}
@@ -24,12 +28,12 @@ type BasicBroker struct {
 	}
 }
 
-func (b *BasicBroker) initKeys() {
-	if b.keys.RWMutex == nil {
-		b.keys.RWMutex = new(sync.RWMutex)
-		b.keys.Lock()
-		b.keys.db = make(map[string]OnMessageFn)
-		b.keys.Unlock()
+func (b *BasicBroker) initPublications() {
+	if b.publications.RWMutex == nil {
+		b.publications.RWMutex = new(sync.RWMutex)
+		b.publications.Lock()
+		b.publications.db = make(map[string]OnMessageFn)
+		b.publications.Unlock()
 	}
 }
 
@@ -43,10 +47,10 @@ func (b *BasicBroker) initSubscriptions() {
 }
 
 func (b *BasicBroker) getKey(key string) (OnMessageFn, error) {
-	b.keys.RLock()
-	defer b.keys.RUnlock()
+	b.publications.RLock()
+	defer b.publications.RUnlock()
 
-	if fn, ok := b.keys.db[key]; ok {
+	if fn, ok := b.publications.db[key]; ok {
 		return fn, nil
 	}
 
@@ -80,6 +84,44 @@ func (b *BasicBroker) generateId() string {
 	return id.String()
 }
 
+func (b *BasicBroker) publish(key string, value interface{}) []SubscriptionReport {
+	b.initPublications()
+	b.publications.Lock()
+	defer b.publications.Unlock()
+
+	reports := make([]SubscriptionReport, 0)
+	b.subscriptions.RLock()
+	defer b.subscriptions.RUnlock()
+	for f, subs := range b.subscriptions.db {
+		if b.keyMatch(key, f) {
+			for _, sub := range subs {
+				report := SubscriptionReport{
+					Subscription: sub,
+					err:          nil,
+				}
+				if sub.fn != nil {
+					report.err = sub.fn(Message{
+						MessageMetadata: MessageMetadata{
+							Id:  b.generateId(),
+							Key: key,
+						},
+						Value: value,
+					})
+				}
+				reports = append(reports, report)
+			}
+		}
+	}
+	return reports
+}
+
+func (b *BasicBroker) cancelPublication(key string) {
+	b.initPublications()
+	b.publications.Lock()
+	delete(b.publications.db, key)
+	b.publications.Unlock()
+}
+
 func (b *BasicBroker) cancelSubscription(id string) {
 	b.initSubscriptions()
 	b.subscriptions.Lock()
@@ -95,26 +137,33 @@ func (b *BasicBroker) cancelSubscription(id string) {
 	}
 }
 
-func (b *BasicBroker) Create(key string, fn OnMessageFn) error {
-	b.initKeys()
-	b.keys.Lock()
-	defer b.keys.Unlock()
-	if _, ok := b.keys.db[key]; ok {
-		return ErrorKeyAlreadyDefined
+func (b *BasicBroker) Create(key string, fn OnMessageFn) (Publication, error) {
+	b.initPublications()
+	b.publications.Lock()
+	defer b.publications.Unlock()
+	if _, ok := b.publications.db[key]; ok {
+		return Publication{}, ErrorKeyAlreadyDefined
 	}
-	b.keys.db[key] = fn
-	return nil
+	b.publications.db[key] = fn
+	publication := Publication{
+		broker: b,
+		key:    key,
+	}
+	return publication, nil
 }
 
 func (b *BasicBroker) Publish(key string, value interface{}) (error, []SubscriptionReport) {
-	b.initKeys()
+	b.initPublications()
 	b.initSubscriptions()
+
 	if fn, err := b.getKey(key); err != nil {
 		return err, nil
 	} else if fn != nil {
 		err := fn(Message{
-			Id:    b.generateId(),
-			Key:   key,
+			MessageMetadata: MessageMetadata{
+				Id:  b.generateId(),
+				Key: key,
+			},
 			Value: value,
 		})
 		if err != nil {
@@ -122,28 +171,7 @@ func (b *BasicBroker) Publish(key string, value interface{}) (error, []Subscript
 		}
 	}
 
-	reports := make([]SubscriptionReport, 0)
-	b.subscriptions.RLock()
-	defer b.subscriptions.RUnlock()
-	for f, subs := range b.subscriptions.db {
-		if b.keyMatch(key, f) {
-			for _, sub := range subs {
-				report := SubscriptionReport{
-					Subscription: sub,
-					err:          nil,
-				}
-				if sub.fn != nil {
-					report.err = sub.fn(Message{
-						Id:    b.generateId(),
-						Key:   key,
-						Value: value,
-					})
-				}
-				reports = append(reports, report)
-			}
-		}
-	}
-	return nil, reports
+	return nil, b.publish(key, value)
 }
 
 func (b *BasicBroker) Subscribe(filter string, fn OnMessageFn) CancelableSubscription {

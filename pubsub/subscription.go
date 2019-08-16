@@ -16,7 +16,7 @@ func (s Subscription) Filter() string {
 
 type CancelableSubscription struct {
 	Subscription
-	broker *BasicBroker
+	broker Broker
 }
 
 func (s *CancelableSubscription) Cancel() error {

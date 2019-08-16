@@ -1,7 +1,11 @@
 package pubsub
 
+type MessageMetadata struct {
+	Id  string
+	Key string
+}
+
 type Message struct {
-	Id    string
-	Key   string
+	MessageMetadata
 	Value interface{}
 }
