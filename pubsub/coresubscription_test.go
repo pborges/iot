@@ -3,9 +3,9 @@ package pubsub
 import "testing"
 
 func TestCancelableSubscription_Cancel(t *testing.T) {
-	s := CancelableSubscription{
-		Subscription: Subscription{},
-		broker:       &BasicBroker{},
+	s := CancelableCoreSubscription{
+		CoreSubscription: CoreSubscription{},
+		broker:           &CoreBroker{},
 	}
 
 	if s.broker == nil {

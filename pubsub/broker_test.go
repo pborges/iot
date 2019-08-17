@@ -5,7 +5,7 @@ import (
 )
 
 func TestBasicBroker_cancelSubscription(t *testing.T) {
-	b := &BasicBroker{}
+	b := &CoreBroker{}
 
 	sub := b.Subscribe("*", nil)
 
@@ -23,7 +23,7 @@ func TestBasicBroker_cancelSubscription(t *testing.T) {
 }
 
 func TestBasicBroker_Create(t *testing.T) {
-	b := &BasicBroker{}
+	b := &CoreBroker{}
 	onCreateCalled := false
 	if _, err := b.Create("test", func(m Message) error {
 		onCreateCalled = true
