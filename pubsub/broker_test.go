@@ -25,7 +25,7 @@ func TestBasicBroker_cancelSubscription(t *testing.T) {
 func TestBasicBroker_Create(t *testing.T) {
 	b := &CoreBroker{}
 	onCreateCalled := false
-	if _, err := b.Create("test", func(m Message) error {
+	if _, err := b.Create("test", func(k string, v interface{}) error {
 		onCreateCalled = true
 		return nil
 	}); err != nil {

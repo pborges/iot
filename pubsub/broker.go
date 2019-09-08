@@ -1,22 +1,16 @@
 package pubsub
 
-type OnMessageFn func(Message) error
-type OnCreateFn func(Publication)
-type OnPublishFn func(Message, []SubscriptionReport)
+type OnMessageFn func(key string, value interface{}) error
+type OnCreateFn func(pub Publication)
 type OnSubscribeFn func(CancelableSubscription)
 
 type Broker interface {
 	Creator
-	Publisher
 	Subscriber
 }
 
 type Creator interface {
 	Create(key string, fn OnMessageFn) (Publication, error)
-}
-
-type Publisher interface {
-	Publish(key string, value interface{}) (error, []SubscriptionReport)
 }
 
 type Subscriber interface {

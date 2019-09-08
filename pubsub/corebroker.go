@@ -5,6 +5,11 @@ import (
 	"sync"
 )
 
+type CoreMetadata struct {
+	Id  string
+	Key string
+}
+
 type CoreBroker struct {
 	publications struct {
 		db map[string]OnMessageFn
@@ -14,9 +19,6 @@ type CoreBroker struct {
 		db map[string][]CoreSubscription
 		*sync.RWMutex
 	}
-	onCreate    OnCreateFn
-	onPublish   OnPublishFn
-	onSubscribe OnSubscribeFn
 }
 
 func (b *CoreBroker) initPublications() {
@@ -80,13 +82,6 @@ func (b *CoreBroker) publish(key string, value interface{}) []SubscriptionReport
 	b.publications.Lock()
 	defer b.publications.Unlock()
 
-	msg := Message{
-		MessageMetadata: MessageMetadata{
-			Id:  b.generateId(),
-			Key: key,
-		},
-		Value: value,
-	}
 	reports := make([]SubscriptionReport, 0)
 	b.subscriptions.RLock()
 	for f, subs := range b.subscriptions.db {
@@ -97,16 +92,13 @@ func (b *CoreBroker) publish(key string, value interface{}) []SubscriptionReport
 					err:              nil,
 				}
 				if sub.fn != nil {
-					report.err = sub.fn(msg)
+					report.err = sub.fn(key, value)
 				}
 				reports = append(reports, report)
 			}
 		}
 	}
 	b.subscriptions.RUnlock()
-	if b.onPublish != nil {
-		b.onPublish(msg, reports)
-	}
 	return reports
 }
 
@@ -146,10 +138,6 @@ func (b *CoreBroker) Create(key string, fn OnMessageFn) (Publication, error) {
 		key:    key,
 	}
 
-	if b.onCreate != nil {
-		b.onCreate(publication)
-	}
-
 	return publication, nil
 }
 
@@ -160,13 +148,7 @@ func (b *CoreBroker) Publish(key string, value interface{}) (error, []Subscripti
 	if fn, err := b.getKey(key); err != nil {
 		return err, nil
 	} else if fn != nil {
-		err := fn(Message{
-			MessageMetadata: MessageMetadata{
-				Id:  b.generateId(),
-				Key: key,
-			},
-			Value: value,
-		})
+		err := fn(key, value)
 		if err != nil {
 			return err, nil
 		}
@@ -193,8 +175,5 @@ func (b *CoreBroker) Subscribe(filter string, fn OnMessageFn) CancelableSubscrip
 	}
 	b.subscriptions.db[filter] = append(b.subscriptions.db[filter], sub.CoreSubscription)
 	b.subscriptions.Unlock()
-	if b.onSubscribe != nil {
-		b.onSubscribe(sub)
-	}
 	return sub
 }

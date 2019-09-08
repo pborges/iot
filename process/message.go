@@ -1,11 +1,9 @@
 package process
 
-import "github.com/pborges/iot/pubsub"
+type OnMessageFn func(MetaData) error
 
-type OnMessageFn func(Message) error
-
-type Message struct {
-	pubsub.MessageMetadata
+type MetaData struct {
 	Process string
+	Key     string
 	Value   interface{}
 }

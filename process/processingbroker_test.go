@@ -22,7 +22,7 @@ func TestProcess_Publish(t *testing.T) {
 	broker := &pubsub.CoreBroker{}
 
 	p1 := ProcessingBroker{name: "ProcessingBroker 1", broker: broker}
-	p1.Subscribe("*", func(m Message) error {
+	p1.Subscribe("*", func(m MetaData) error {
 		if m.Process != p1.name {
 			t.Error("unexpected process name")
 		}
