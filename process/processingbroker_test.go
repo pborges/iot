@@ -7,7 +7,7 @@ import (
 
 func TestProcess_Subscribe(t *testing.T) {
 	p := ProcessingBroker{}
-	p.Wrap(&pubsub.CoreBroker{})
+	p.Wrap(&pubsub.Broker{})
 
 	p.Subscribe("*", nil)
 	if len(p.subscriptions) != 1 {
@@ -19,10 +19,10 @@ func TestProcess_Subscribe(t *testing.T) {
 }
 
 func TestProcess_Publish(t *testing.T) {
-	broker := &pubsub.CoreBroker{}
+	broker := &pubsub.Broker{}
 
 	p1 := ProcessingBroker{name: "ProcessingBroker 1", broker: broker}
-	p1.Subscribe("*", func(m MetaData) error {
+	p1.Subscribe("*", func(m Message) error {
 		if m.Process != p1.name {
 			t.Error("unexpected process name")
 		}
@@ -41,5 +41,5 @@ func TestProcess_Publish(t *testing.T) {
 	p2 := ProcessingBroker{name: "ProcessingBroker 2", broker: broker}
 
 	pub, _ := p2.Create("test", nil)
-	pub.Publish(1234)
+	pub.Update(1234)
 }

@@ -4,31 +4,15 @@ import (
 	"testing"
 )
 
-func TestBasicBroker_cancelSubscription(t *testing.T) {
-	b := &CoreBroker{}
-
-	sub := b.Subscribe("*", nil)
-
-	if _, err := b.getSubscription(sub.Id()); err != nil {
-		t.Error(err)
-	}
-
-	if err := sub.Cancel(); err != nil {
-		t.Error(err)
-	}
-
-	if _, err := b.getSubscription(sub.Id()); err != ErrorSubscriptionNotFound {
-		t.Error("expected error got nothing")
-	}
-}
-
-func TestBasicBroker_Create(t *testing.T) {
-	b := &CoreBroker{}
+func TestBroker_Create(t *testing.T) {
+	b := &Broker{}
 	onCreateCalled := false
-	if _, err := b.Create("test", func(k string, v interface{}) error {
+	_, err := b.Create("test", func(in interface{}) (interface{}, error) {
 		onCreateCalled = true
-		return nil
-	}); err != nil {
+		return in, nil
+	})
+
+	if err != nil {
 		t.Error(err)
 	}
 
@@ -36,11 +20,33 @@ func TestBasicBroker_Create(t *testing.T) {
 		t.Error("key not found")
 	}
 
-	if err, _ := b.Publish("test", true); err != nil {
+	err, _ = b.Publish("test", true)
+
+	if err != nil {
 		t.Error(err)
 	}
 
 	if !onCreateCalled {
-		t.Error("create onMessage was not called")
+		t.Error("create onCreate was not called")
+	}
+}
+
+func TestPublication_Update(t *testing.T) {
+	b := &Broker{}
+	publication, err := b.Create("test", nil)
+	if err != nil {
+		t.Error(err)
+	}
+
+	onSubscribeCalled := false
+	b.Subscribe("*", func(key string, value interface{}) error {
+		onSubscribeCalled = true
+		return nil
+	})
+
+	publication.Update(123)
+
+	if !onSubscribeCalled {
+		t.Error("onSubscribe not called")
 	}
 }

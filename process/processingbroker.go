@@ -4,24 +4,35 @@ import (
 	"github.com/pborges/iot/pubsub"
 )
 
-type ProcessingBroker struct {
-	name          string
-	broker        pubsub.Broker
-	subscriptions []pubsub.CancelableSubscription
+type Message struct {
+	Process string
+	Key     string
+	Value   interface{}
 }
 
-func (b *ProcessingBroker) Wrap(next pubsub.Broker) {
+type ProcessingBroker struct {
+	name          string
+	broker        *pubsub.Broker
+	subscriptions []*pubsub.CancelableSubscription
+}
+
+func (b *ProcessingBroker) Wrap(next *pubsub.Broker) {
 	b.broker = next
 }
 
-func (b *ProcessingBroker) Create(key string, fn func(MetaData) error) (Publication, error) {
-	pub, err := b.broker.Create(b.name+"."+key, func(key string, value interface{}) error {
-		data := MetaData{
-			Process: b.name,
+func (b *ProcessingBroker) Create(key string, fn pubsub.TransformFn) (Publication, error) {
+	// prefix the key
+	key = b.name + "." + key
+	// wrap the transformation with another transformation into Message
+	pub, err := b.broker.Create(key, func(in interface{}) (interface{}, error) {
+		// do the provided transformation
+		out, err := fn(in)
+		// wrap the transformed value and add Process specific metadata
+		return Message{
 			Key:     key,
-			Value:   value,
-		}
-		return fn(data)
+			Process: b.name,
+			Value:   out,
+		}, err
 	})
 
 	return Publication{
@@ -30,14 +41,9 @@ func (b *ProcessingBroker) Create(key string, fn func(MetaData) error) (Publicat
 	}, err
 }
 
-func (b *ProcessingBroker) Subscribe(filter string, fn OnMessageFn) {
+func (b *ProcessingBroker) Subscribe(filter string, fn func(metadata Message) error) {
 	sub := b.broker.Subscribe(filter, func(key string, value interface{}) error {
-		data := MetaData{
-			Process: b.name,
-			Key:     key,
-			Value:   value,
-		}
-		return fn(data)
+		return fn(value.(Message))
 	})
 	b.subscriptions = append(b.subscriptions, sub)
 }
@@ -45,11 +51,4 @@ func (b *ProcessingBroker) Subscribe(filter string, fn OnMessageFn) {
 type Publication struct {
 	broker *ProcessingBroker
 	pubsub.Publication
-}
-
-func (p Publication) Publish(value interface{}) {
-	p.Publication.Publish(MetaData{
-		Process: p.broker.name,
-		Value:   value,
-	})
 }
