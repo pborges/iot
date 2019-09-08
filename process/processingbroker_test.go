@@ -6,8 +6,9 @@ import (
 )
 
 func TestProcess_Subscribe(t *testing.T) {
-	broker := &pubsub.CoreBroker{}
-	p := ProcessingBroker{Broker: broker}
+	p := ProcessingBroker{}
+	p.Wrap(&pubsub.CoreBroker{})
+
 	p.Subscribe("*", nil)
 	if len(p.subscriptions) != 1 {
 		t.Error("subscription count is incorrect")
@@ -19,24 +20,26 @@ func TestProcess_Subscribe(t *testing.T) {
 
 func TestProcess_Publish(t *testing.T) {
 	broker := &pubsub.CoreBroker{}
-	_, err := broker.Create("test", nil)
-	if err != nil {
-		t.Error(err)
-	}
 
-	p := ProcessingBroker{Name: "ProcessingBroker One", Broker: broker}
-	p.Subscribe("*", func(m Message) error {
+	p1 := ProcessingBroker{name: "ProcessingBroker 1", broker: broker}
+	p1.Subscribe("*", func(m Message) error {
+		if m.Process != p1.name {
+			t.Error("unexpected process name")
+		}
 		if m.Value != 1234 {
 			t.Error("unexpected value")
 		}
-		if m.Process != p.Name {
+		if m.Process != p1.name {
 			t.Error("invalid process name")
+		}
+		if m.Key != "test" {
+			t.Error("invalid key name")
 		}
 		return nil
 	})
 
-	err, _ = p.Publish("test", 1234)
-	if err != nil {
-		t.Error(err)
-	}
+	p2 := ProcessingBroker{name: "ProcessingBroker 2", broker: broker}
+
+	pub, _ := p2.Create("test", nil)
+	pub.Publish(1234)
 }
