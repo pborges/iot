@@ -7,7 +7,7 @@ import (
 // this is not a valid test yet
 func TestRecordingBroker_Create(t *testing.T) {
 	b := RecordingBroker{
-		Next: &CoreBroker{},
+		Broker: &CoreBroker{},
 	}
 
 	b.Create("hi", nil)

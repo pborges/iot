@@ -7,7 +7,7 @@ import (
 
 func TestProcess_Subscribe(t *testing.T) {
 	broker := &pubsub.CoreBroker{}
-	p := Process{broker: broker}
+	p := ProcessingBroker{Broker: broker}
 	p.Subscribe("*", nil)
 	if len(p.subscriptions) != 1 {
 		t.Error("subscription count is incorrect")
@@ -24,7 +24,7 @@ func TestProcess_Publish(t *testing.T) {
 		t.Error(err)
 	}
 
-	p := Process{Name: "Process One", broker: broker}
+	p := ProcessingBroker{Name: "ProcessingBroker One", Broker: broker}
 	p.Subscribe("*", func(m Message) error {
 		if m.Value != 1234 {
 			t.Error("unexpected value")
