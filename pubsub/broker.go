@@ -5,16 +5,21 @@ type OnCreateFn func(Publication)
 type OnPublishFn func(Message, []SubscriptionReport)
 type OnSubscribeFn func(CancelableSubscription)
 
-type EventableBroker interface {
-	Broker
-	OnCreate(OnCreateFn)
-	OnPublish(OnPublishFn)
-	OnSubscribe(OnSubscribeFn)
+type Broker interface {
+	Creator
+	Publisher
+	Subscriber
 }
 
-type Broker interface {
+type Creator interface {
 	Create(key string, fn OnMessageFn) (Publication, error)
+}
+
+type Publisher interface {
 	Publish(key string, value interface{}) (error, []SubscriptionReport)
+}
+
+type Subscriber interface {
 	Subscribe(filter string, fn OnMessageFn) CancelableSubscription
 }
 

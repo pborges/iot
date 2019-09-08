@@ -198,15 +198,3 @@ func (b *CoreBroker) Subscribe(filter string, fn OnMessageFn) CancelableSubscrip
 	}
 	return sub
 }
-
-func (b *CoreBroker) OnCreate(fn OnCreateFn) {
-	b.onCreate = fn
-}
-
-func (b *CoreBroker) OnPublish(fn OnPublishFn) {
-	b.onPublish = fn
-}
-
-func (b *CoreBroker) OnSubscribe(fn OnSubscribeFn) {
-	b.onSubscribe = fn
-}
