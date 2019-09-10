@@ -3,7 +3,7 @@ package pubsub
 import "testing"
 
 func TestCancelableSubscription_Cancel(t *testing.T) {
-	b := &Broker{}
+	b := &BasicBroker{}
 
 	sub := b.Subscribe("*", nil)
 

@@ -1,18 +1,18 @@
 package pubsub
 
-type Publication struct {
+type BasicPublication struct {
 	key    string
-	broker *Broker
+	broker *BasicBroker
 }
 
-func (p Publication) Cancel() {
+func (p BasicPublication) Cancel() {
 	p.broker.cancelPublication(p.key)
 }
 
-func (p Publication) Key() string {
+func (p BasicPublication) Key() string {
 	return p.key
 }
 
-func (p Publication) Update(value interface{}) {
-	p.broker.publish(p.key, value)
+func (p BasicPublication) Update(value interface{}) (error, []SubscriptionReport) {
+	return nil, p.broker.publish(p.key, value)
 }
