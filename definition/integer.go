@@ -1,15 +1,16 @@
-package typed
+package definition
 
 import (
 	"errors"
 )
 
-type IntegerAcceptor struct {
+type IntegerDefinition struct {
+	BaseDefinition
 	Min int64
 	Max int64
 }
 
-func (a IntegerAcceptor) Accept(value interface{}) error {
+func (a IntegerDefinition) Accept(value interface{}) error {
 	var data int64
 	switch i := value.(type) {
 	case int:
@@ -33,5 +34,5 @@ func (a IntegerAcceptor) Accept(value interface{}) error {
 			return errors.New("value is more then max")
 		}
 	}
-	return nil
+	return a.AcceptFN(value)
 }
