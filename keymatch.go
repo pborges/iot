@@ -1,6 +1,8 @@
-package pubsub
+package iot
 
-import "strings"
+import (
+	"strings"
+)
 
 func KeyMatch(key, filter string) bool {
 	segFilter := strings.Split(filter, ".")
