@@ -29,7 +29,10 @@ func main() {
 	attr, _, _ := c1.Create("temp", iot.IntegerDefinition{Default: 3}, nil)
 	attr.Update(55)
 
-	c4.Create("bob", iot.IntegerDefinition{}, nil)
+	c4.Create("bob", iot.IntegerDefinition{}, func(i interface{}) error {
+		fmt.Println("[AcceptFN        ] ATTR: bob VALUE:", i)
+		return nil
+	})
 
 	c4.Publish("client1.temp", 67)
 	c2.Publish("client4.bob", 666)
