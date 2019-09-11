@@ -52,7 +52,7 @@ func (b Broker) fanout(attr Attribute) []SubscriptionReport {
 						client: client.subClient(sub.filter),
 					}
 					report.Error = sub.fn(attr.name, attr.Value(), responder)
-					fmt.Println("[OnSubscribeEvent]", "SENT_TO:", client.name, "NAME:", attr.name, "VALUE:", attr.Value().Value, "BY", attr.Value().By+"@"+attr.Value().At.Format(time.RFC822))
+					fmt.Println("[OnSubscribeEvent]", "TO:", responder.client.name, "ATTR:", attr.name, "VALUE:", attr.Value().Value, "BY", attr.Value().By+"@"+attr.Value().At.Format(time.RFC822))
 					reports = append(reports, report)
 				}
 			}
@@ -88,7 +88,7 @@ func (b *Broker) createAttribute(client *Client, name string, def Definition, ac
 }
 
 func (b *Broker) updateAndFanout(by *Client, attr Attribute, value interface{}) (error, []SubscriptionReport) {
-	fmt.Println("[SelfUpdate      ] NAME:", attr.name, "VALUE:", value)
+	fmt.Println("[SelfUpdate      ] ATTR:", attr.name, "VALUE:", value)
 	// update the value
 	b.setAttributeValue(by, attr, value)
 
@@ -97,7 +97,7 @@ func (b *Broker) updateAndFanout(by *Client, attr Attribute, value interface{}) 
 }
 
 func (b *Broker) publish(by *Client, name string, value interface{}) (error, []SubscriptionReport) {
-	fmt.Println("[Publish         ] NAME:", name, "VALUE:", value, "BY:", by.name)
+	fmt.Println("[Publish         ] ATTR:", name, "VALUE:", value, "BY:", by.name)
 	if attr, ok := b.attributes[name]; ok {
 		// validate the value
 		var err error
