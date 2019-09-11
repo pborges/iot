@@ -5,20 +5,9 @@ import (
 	"github.com/pborges/iot"
 )
 
-var broker iot.Broker
-var clientOrd int
-
-func getTestClient() *iot.Client {
-	clientOrd++
-	client, err := broker.CreateClient(fmt.Sprintf("client%d", clientOrd))
-	if err != nil {
-		panic(err)
-	}
-	return client
-}
-
 // demo
 func main() {
+	var broker iot.Broker
 	c1, _ := broker.CreateClient("client1")
 	c2, _ := broker.CreateClient("client2")
 	c3, _ := broker.CreateClient("client3")
