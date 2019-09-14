@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"github.com/pborges/iot/attribute"
 	"github.com/pborges/iot/pubsub"
 )
 
@@ -30,10 +29,10 @@ func main() {
 		return nil
 	})
 
-	attr, _, _ := c1.CreateAttribute("temp", attribute.IntegerDefinition{Default: 3}, nil)
+	attr, _, _ := c1.CreateAttribute("temp", pubsub.IntegerDefinition{Default: 3}, nil)
 	attr.Update(55)
 
-	c4.CreateAttribute("bob", attribute.IntegerDefinition{}, func(i interface{}) error {
+	c4.CreateAttribute("bob", pubsub.IntegerDefinition{}, func(i interface{}) error {
 		fmt.Println("[AcceptFN          ] ATTR: bob VALUE:", i)
 		return nil
 	})

@@ -78,7 +78,7 @@ func (c *Client) CreateAttribute(name string, def Definition, acceptFn OnAcceptF
 }
 
 func (c *Client) Publish(name string, value interface{}) (error, []SubscriptionReport) {
-	return c.broker.publish(PublishSource{client: c}, name, value)
+	return c.broker.publish(ClientSource{client: c}, name, value)
 }
 
 func (c *Client) Subscribe(filter string, fn OnMessageFn) (Subscription, error) {

@@ -106,7 +106,7 @@ func (b *Broker) createAttribute(client *Client, name string, def Definition, ac
 func (b *Broker) selfUpdateAndFanout(by *Client, attr Attribute, value interface{}) (error, []SubscriptionReport) {
 	fmt.Println("[SelfUpdate        ] ATTR:", attr.name, "VALUE:", value)
 	// update the value
-	source := UpdateSource{client: by}
+	source := ClientSource{client: by, self: true}
 	b.setAttributeValue(source, attr, value)
 
 	// fanout

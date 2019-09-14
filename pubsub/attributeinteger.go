@@ -1,8 +1,7 @@
-package attribute
+package pubsub
 
 import (
 	"errors"
-	"github.com/pborges/iot/pubsub"
 )
 
 type IntegerDefinition struct {
@@ -11,11 +10,11 @@ type IntegerDefinition struct {
 	Default int64
 }
 
-func (a IntegerDefinition) Extract(d pubsub.Datum) (int64, error) {
+func (a IntegerDefinition) Extract(d Datum) (int64, error) {
 	if d.Def == a {
 		return d.Value.(int64), nil
 	}
-	return a.DefaultValue().(int64), pubsub.ErrMismatchedDefinition
+	return a.DefaultValue().(int64), ErrMismatchedDefinition
 }
 
 func (a IntegerDefinition) DefaultValue() interface{} {
@@ -40,7 +39,7 @@ func (a IntegerDefinition) Transform(value interface{}) (interface{}, error) {
 	case float64:
 		data = int64(i)
 	default:
-		return nil, pubsub.ErrUnknownType
+		return nil, ErrUnknownType
 	}
 	if a.Min != 0 || a.Max != 0 {
 		if data < a.Min {

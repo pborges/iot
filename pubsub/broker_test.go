@@ -2,7 +2,6 @@ package pubsub
 
 import (
 	"fmt"
-	"github.com/pborges/iot/attribute"
 	"testing"
 )
 
@@ -79,7 +78,7 @@ func TestBroker_List(t *testing.T) {
 		}
 	})
 	t.Run("test create defined attribute", func(t *testing.T) {
-		attr, err, reports := client.CreateAttribute("one", attribute.IntegerDefinition{Default: 1234}, nil)
+		attr, err, reports := client.CreateAttribute("one", IntegerDefinition{Default: 1234}, nil)
 		if err != nil {
 			t.Error(err)
 		}

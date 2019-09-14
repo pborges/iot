@@ -1,7 +1,6 @@
-package attribute
+package pubsub
 
 import (
-	"github.com/pborges/iot/pubsub"
 	"testing"
 )
 
@@ -20,7 +19,7 @@ func TestIntegerDefinition_Extract(t *testing.T) {
 
 	var val int64 = 6
 
-	d := pubsub.Datum{
+	d := Datum{
 		Def:   i,
 		Value: val,
 	}

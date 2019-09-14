@@ -2,7 +2,6 @@ package pubsub
 
 import (
 	"fmt"
-	"github.com/pborges/iot/attribute"
 	"testing"
 )
 
@@ -49,7 +48,7 @@ func TestClient_PublishAndFanout(t *testing.T) {
 		t.Error(err)
 	}
 
-	attr, err, reports := c1.CreateAttribute("temp", attribute.IntegerDefinition{Default: 3}, nil)
+	attr, err, reports := c1.CreateAttribute("temp", IntegerDefinition{Default: 3}, nil)
 	if err != nil {
 		t.Error(err)
 	}
