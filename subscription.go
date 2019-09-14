@@ -22,8 +22,7 @@ func (s Subscription) Filter() string {
 }
 
 func (s Subscription) Cancel() error {
-	delete(s.client.subs, s.filter)
-	return nil
+	return s.client.subs.cancel(s)
 }
 
 // BrokerAccess provides the subscription callback a way to interact with the broker in an accountable manner

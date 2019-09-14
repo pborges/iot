@@ -44,18 +44,19 @@ func (b Broker) fanout(attr Attribute) []SubscriptionReport {
 	reports := make([]SubscriptionReport, 0)
 	if b.clients != nil {
 		for _, client := range b.clients {
-			for _, sub := range client.subs {
+			client.subs.foreach(func(sub Subscription) bool {
 				if KeyMatch(attr.name, sub.filter) {
 					report := SubscriptionReport{Subscription: sub}
 					responder := BrokerAccess{
 						sub:    sub,
-						client: client.subClient(sub.filter),
+						client: client.createSubClient(sub.filter),
 					}
 					report.Error = sub.fn(attr.name, attr.Value(), responder)
 					fmt.Println("[OnSubscribeEvent]", "TO:", responder.client.name, "ATTR:", attr.name, "VALUE:", attr.Value().Value, "BY", attr.Value().By+"@"+attr.Value().At.Format(time.RFC822))
 					reports = append(reports, report)
 				}
-			}
+				return true
+			})
 		}
 	}
 	return reports
@@ -120,19 +121,6 @@ func (b *Broker) publish(by *Client, name string, value interface{}) (error, []S
 	return errors.New("unknown attribute"), nil
 }
 
-func (b *Broker) subscribe(client *Client, filter string, fn OnMessageFn) (Subscription, error) {
-	if _, ok := client.subs[filter]; ok {
-		return Subscription{}, ErrDuplicateName
-	}
-	sub := Subscription{
-		client: client,
-		filter: filter,
-		fn:     fn,
-	}
-	client.subs[filter] = sub
-	return sub, nil
-}
-
 func (b *Broker) CreateClient(name string) (*Client, error) {
 	if b.clients == nil {
 		b.clients = make(map[string]*Client)
@@ -143,7 +131,6 @@ func (b *Broker) CreateClient(name string) (*Client, error) {
 	client := &Client{
 		broker: b,
 		name:   name,
-		subs:   map[string]Subscription{},
 	}
 	b.clients[name] = client
 	return client, nil
