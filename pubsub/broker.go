@@ -77,10 +77,6 @@ func (b Broker) fanout(source Source, attr Attribute) []SubscriptionReport {
 	return reports
 }
 
-func (b *Broker) cancelSubscription(client *Client, name string) error {
-	return nil
-}
-
 func (b *Broker) createAttribute(client *Client, name string, def Definition, acceptFn func(interface{}) error) (Attribute, error, []SubscriptionReport) {
 	attr := Attribute{name: name, owner: client, Definition: def, fn: acceptFn}
 
