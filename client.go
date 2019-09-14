@@ -41,7 +41,7 @@ func (c *clients) foreach(fn func(client *Client) bool) {
 	}
 	c.lock.RUnlock()
 
-	//todo there should be a write lock on the client, and a check to make sure this client still exists before the fn gets called
+	//todo there should be a write lock on the owner, and a check to make sure this owner still exists before the fn gets called
 	// continue as long as we get true back
 	for _, s := range clients {
 		if c := fn(s); !c {
@@ -78,7 +78,7 @@ func (c *Client) CreateAttribute(name string, def Definition, acceptFn OnAcceptF
 }
 
 func (c *Client) Publish(name string, value interface{}) (error, []SubscriptionReport) {
-	return c.broker.publish(c, name, value)
+	return c.broker.publish(PublishSource{client: c}, name, value)
 }
 
 func (c *Client) Subscribe(filter string, fn OnMessageFn) (Subscription, error) {

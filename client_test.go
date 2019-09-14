@@ -10,7 +10,7 @@ var clientOrd int
 
 func getTestClient(t *testing.T) *Client {
 	clientOrd++
-	client, err := broker.CreateClient(fmt.Sprintf("client%d", clientOrd))
+	client, err := broker.CreateClient(fmt.Sprintf("owner%d", clientOrd))
 	if err != nil {
 		t.Error(err)
 	}
@@ -27,21 +27,21 @@ func TestClient_PublishAndFanout(t *testing.T) {
 	var c3Subscribe int64
 	var c4Subscribe int64
 
-	if _, err := c2.Subscribe(">", func(name string, value Datum, res BrokerAccess) error {
+	if _, err := c2.Subscribe(">", func(name string, value Datum, res Context) error {
 		c2Subscribe = value.Value.(int64)
 		return nil
 	}); err != nil {
 		t.Error(err)
 	}
 
-	if _, err := c3.Subscribe(">", func(name string, value Datum, res BrokerAccess) error {
+	if _, err := c3.Subscribe(">", func(name string, value Datum, res Context) error {
 		c3Subscribe = value.Value.(int64)
 		return nil
 	}); err != nil {
 		t.Error(err)
 	}
 
-	if _, err := c4.Subscribe("bob", func(name string, value Datum, res BrokerAccess) error {
+	if _, err := c4.Subscribe("bob", func(name string, value Datum, res Context) error {
 		c4Subscribe = value.Value.(int64)
 		return nil
 	}); err != nil {
@@ -60,7 +60,7 @@ func TestClient_PublishAndFanout(t *testing.T) {
 	}
 
 	if c4Subscribe != 0 {
-		t.Fatalf("did not expect c4 to get the fanout, but its value changed too %d",c4Subscribe)
+		t.Fatalf("did not expect c4 to get the fanout, but its value changed too %d", c4Subscribe)
 	}
 
 	c2Subscribe = 0

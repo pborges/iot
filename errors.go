@@ -4,8 +4,8 @@ import (
 	"fmt"
 )
 
-var ErrDuplicateClient = ErrDuplicate("client")
-var ErrClientNotFound = ErrNotFound("client")
+var ErrDuplicateClient = ErrDuplicate("owner")
+var ErrClientNotFound = ErrNotFound("owner")
 
 var ErrDuplicateSubscription = ErrDuplicate("subscription")
 var ErrSubscriptionNotFound = ErrNotFound("subscription")

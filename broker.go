@@ -20,15 +20,16 @@ func (b Broker) cancelAttribute(name string) error {
 	return nil
 }
 
-func (b *Broker) setAttributeValue(by *Client, attr Attribute, value interface{}) {
+func (b *Broker) setAttributeValue(source Source, attr Attribute, value interface{}) {
 	if b.values == nil {
 		b.values = make(map[string]Datum)
 	}
 	b.values[attr.name] = Datum{
+		Owner: attr.owner.name,
 		Name:  attr.name,
 		Def:   attr.Definition,
 		Value: value,
-		By:    by.name,
+		By:    source,
 		At:    time.Now(),
 	}
 }
@@ -51,20 +52,20 @@ func (b *Broker) createClient(parent *Client, name string) *Client {
 	}
 }
 
-func (b Broker) fanout(attr Attribute) []SubscriptionReport {
+func (b Broker) fanout(source Source, attr Attribute) []SubscriptionReport {
 	reports := make([]SubscriptionReport, 0)
 
 	b.clients.foreach(func(client *Client) bool {
 		client.subs.foreach(func(sub Subscription) bool {
 			if KeyMatch(attr.name, sub.filter) {
 				report := SubscriptionReport{Subscription: sub}
-				responder := BrokerAccess{
-					sub: sub,
+				ctx := Context{
+					source: SubscriptionSource{sub: sub},
 				}
-				responder.client = b.createClient(client, sub.filter)
+				ctx.client = b.createClient(client, sub.filter)
 
-				report.Error = sub.fn(attr.name, attr.Value(), responder)
-				fmt.Println("[OnSubscribeEvent]", "TO:", responder.client.name, "ATTR:", attr.name, "VALUE:", attr.Value().Value, "BY", attr.Value().By+"@"+attr.Value().At.Format(time.RFC822))
+				report.Error = sub.fn(attr.name, attr.Value(), ctx)
+				fmt.Println("⤷ [OnSubscribeEvent]", "TO:", ctx.Source(), "ATTR:", attr.name, "VALUE:", attr.Value().Value, "SOURCE:", attr.Value().By.String()+"@"+attr.Value().At.Format(time.RFC822))
 
 				reports = append(reports, report)
 			}
@@ -81,7 +82,7 @@ func (b *Broker) cancelSubscription(client *Client, name string) error {
 }
 
 func (b *Broker) createAttribute(client *Client, name string, def Definition, acceptFn func(interface{}) error) (Attribute, error, []SubscriptionReport) {
-	attr := Attribute{name: name, client: client, Definition: def, fn: acceptFn}
+	attr := Attribute{name: name, owner: client, Definition: def, fn: acceptFn}
 
 	// validate the default value if we have a definition
 	var value interface{}
@@ -98,21 +99,22 @@ func (b *Broker) createAttribute(client *Client, name string, def Definition, ac
 	}
 	b.attributes[attr.name] = attr
 
-	err, reports := b.updateAndFanout(client, attr, value)
+	err, reports := b.selfUpdateAndFanout(client, attr, value)
 	return attr, err, reports
 }
 
-func (b *Broker) updateAndFanout(by *Client, attr Attribute, value interface{}) (error, []SubscriptionReport) {
-	fmt.Println("[SelfUpdate      ] ATTR:", attr.name, "VALUE:", value)
+func (b *Broker) selfUpdateAndFanout(by *Client, attr Attribute, value interface{}) (error, []SubscriptionReport) {
+	fmt.Println("[SelfUpdate        ] ATTR:", attr.name, "VALUE:", value)
 	// update the value
-	b.setAttributeValue(by, attr, value)
+	source := UpdateSource{client: by}
+	b.setAttributeValue(source, attr, value)
 
 	// fanout
-	return nil, b.fanout(attr)
+	return nil, b.fanout(source, attr)
 }
 
-func (b *Broker) publish(by *Client, name string, value interface{}) (error, []SubscriptionReport) {
-	fmt.Println("[Publish         ] ATTR:", name, "VALUE:", value, "BY:", by.name)
+func (b *Broker) publish(source Source, name string, value interface{}) (error, []SubscriptionReport) {
+	fmt.Println("[Publish           ] ATTR:", name, "VALUE:", value, "SOURCE:", source)
 	if attr, ok := b.attributes[name]; ok {
 		// validate the value
 		var err error
@@ -128,9 +130,9 @@ func (b *Broker) publish(by *Client, name string, value interface{}) (error, []S
 		}
 
 		// update the attribute value
-		b.setAttributeValue(by, attr, value)
+		b.setAttributeValue(source, attr, value)
 
-		return nil, b.fanout(attr)
+		return nil, b.fanout(source, attr)
 	}
 	return errors.New("unknown attribute"), nil
 }

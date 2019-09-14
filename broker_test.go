@@ -9,8 +9,8 @@ func TestBroker_CreateClient(t *testing.T) {
 	b := Broker{}
 
 	for i := 1; i <= 10; i++ {
-		name := fmt.Sprintf("client%d", i)
-		t.Run(fmt.Sprintf("should create client %s", name), func(t *testing.T) {
+		name := fmt.Sprintf("owner%d", i)
+		t.Run(fmt.Sprintf("should create owner %s", name), func(t *testing.T) {
 			client, err := b.CreateClient(name)
 			if err != nil {
 				t.Error(err)
@@ -29,11 +29,11 @@ func TestBroker_CreateClient(t *testing.T) {
 			}
 
 			if b.clients.db[client.name] == nil {
-				t.Fatal("client not present in map")
+				t.Fatal("owner not present in map")
 			}
 
 			if b.clients.db[client.name].name != name {
-				t.Fatal("client did not get the correct name")
+				t.Fatal("owner did not get the correct name")
 			}
 			t.Run("should error on duplicate name", func(t *testing.T) {
 				_, err := b.CreateClient(name)

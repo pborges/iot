@@ -5,7 +5,7 @@ import (
 	"sync"
 )
 
-type OnMessageFn func(name string, value Datum, b BrokerAccess) error
+type OnMessageFn func(name string, value Datum, b Context) error
 
 type SubscriptionReport struct {
 	Subscription
@@ -73,10 +73,6 @@ func (s Subscription) Id() string {
 	return s.id
 }
 
-func (s Subscription) Name() string {
-	return s.client.name + "[" + s.filter + "]"
-}
-
 func (s Subscription) Filter() string {
 	return s.filter
 }
@@ -85,17 +81,21 @@ func (s Subscription) Cancel() error {
 	return s.client.subs.delete(s)
 }
 
-// BrokerAccess provides the subscription callback a way to interact with the broker in an accountable manner
-type BrokerAccess struct {
-	sub    Subscription
+// Context provides the subscription callback a way to interact with the broker in an accountable manner
+type Context struct {
+	source Source
 	client *Client
 }
 
-func (b BrokerAccess) Publish(name string, value interface{}) (error, []SubscriptionReport) {
-	//make a client that represents the specific subscription
-	return b.client.broker.publish(b.client, name, value)
+func (ctx Context) Source() Source {
+	return ctx.source
 }
 
-func (b BrokerAccess) List(filter string) []Datum {
-	return b.client.broker.List(filter)
+func (ctx Context) Publish(name string, value interface{}) (error, []SubscriptionReport) {
+	//make a owner that represents the specific subscription
+	return ctx.client.broker.publish(ctx.source, name, value)
+}
+
+func (ctx Context) List(filter string) []Datum {
+	return ctx.client.broker.List(filter)
 }
