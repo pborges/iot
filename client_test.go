@@ -48,7 +48,7 @@ func TestClient_PublishAndFanout(t *testing.T) {
 		t.Error(err)
 	}
 
-	attr, err, reports := c1.Create("temp", IntegerDefinition{Default: 3}, nil)
+	attr, err, reports := c1.CreateAttribute("temp", IntegerDefinition{Default: 3}, nil)
 	if err != nil {
 		t.Error(err)
 	}
@@ -56,11 +56,11 @@ func TestClient_PublishAndFanout(t *testing.T) {
 		t.Error("unexpected number of reports, got: ", len(reports))
 	}
 	if c2Subscribe != 3 || c3Subscribe != 3 {
-		t.Error("expected c2 and c3 to get the fanout")
+		t.Errorf("expected c2 and c3 to get the fanout, but their values are still %d and %d", c2Subscribe, c3Subscribe)
 	}
 
 	if c4Subscribe != 0 {
-		t.Error("did not expect c4 to get the fanout")
+		t.Fatalf("did not expect c4 to get the fanout, but its value changed too %d",c4Subscribe)
 	}
 
 	c2Subscribe = 0
@@ -75,7 +75,7 @@ func TestClient_PublishAndFanout(t *testing.T) {
 		t.Error("unexpected number of reports, got: ", len(reports))
 	}
 	if c2Subscribe != 55 || c3Subscribe != 55 {
-		t.Error("expected c2 and c3 to get the fanout")
+		t.Errorf("expected c2 and c3 to get the fanout, but their values are still %d and %d", c2Subscribe, c3Subscribe)
 	}
 
 	if c4Subscribe != 0 {

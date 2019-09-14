@@ -1,11 +1,20 @@
 package iot
 
 import (
-	"errors"
 	"fmt"
 )
 
-var ErrDuplicateName = errors.New("duplicate name")
+var ErrDuplicateClient = ErrDuplicate("client")
+var ErrClientNotFound = ErrNotFound("client")
+
+var ErrDuplicateSubscription = ErrDuplicate("subscription")
+var ErrSubscriptionNotFound = ErrNotFound("subscription")
+
+type ErrDuplicate string
+
+func (e ErrDuplicate) Error() string {
+	return fmt.Sprintf("duplicate %s", e)
+}
 
 type ErrNotFound string
 

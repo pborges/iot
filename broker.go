@@ -9,7 +9,7 @@ import (
 type Broker struct {
 	attributes map[string]Attribute
 	values     map[string]Datum
-	clients    map[string]*Client
+	clients    clients
 }
 
 // delete the attribute from the map, but leave the value
@@ -40,25 +40,39 @@ func (b Broker) getAttributeValue(name string) Datum {
 	return b.values[name]
 }
 
+func (b *Broker) createClient(parent *Client, name string) *Client {
+	if parent != nil {
+		name = parent.name + "[" + name + "]"
+	}
+	return &Client{
+		parent: parent,
+		broker: b,
+		name:   name,
+	}
+}
+
 func (b Broker) fanout(attr Attribute) []SubscriptionReport {
 	reports := make([]SubscriptionReport, 0)
-	if b.clients != nil {
-		for _, client := range b.clients {
-			client.subs.foreach(func(sub Subscription) bool {
-				if KeyMatch(attr.name, sub.filter) {
-					report := SubscriptionReport{Subscription: sub}
-					responder := BrokerAccess{
-						sub:    sub,
-						client: client.createSubClient(sub.filter),
-					}
-					report.Error = sub.fn(attr.name, attr.Value(), responder)
-					fmt.Println("[OnSubscribeEvent]", "TO:", responder.client.name, "ATTR:", attr.name, "VALUE:", attr.Value().Value, "BY", attr.Value().By+"@"+attr.Value().At.Format(time.RFC822))
-					reports = append(reports, report)
+
+	b.clients.foreach(func(client *Client) bool {
+		client.subs.foreach(func(sub Subscription) bool {
+			if KeyMatch(attr.name, sub.filter) {
+				report := SubscriptionReport{Subscription: sub}
+				responder := BrokerAccess{
+					sub: sub,
 				}
-				return true
-			})
-		}
-	}
+				responder.client = b.createClient(client, sub.filter)
+
+				report.Error = sub.fn(attr.name, attr.Value(), responder)
+				fmt.Println("[OnSubscribeEvent]", "TO:", responder.client.name, "ATTR:", attr.name, "VALUE:", attr.Value().Value, "BY", attr.Value().By+"@"+attr.Value().At.Format(time.RFC822))
+
+				reports = append(reports, report)
+			}
+			return true
+		})
+		return true
+	})
+
 	return reports
 }
 
@@ -122,17 +136,10 @@ func (b *Broker) publish(by *Client, name string, value interface{}) (error, []S
 }
 
 func (b *Broker) CreateClient(name string) (*Client, error) {
-	if b.clients == nil {
-		b.clients = make(map[string]*Client)
+	client := b.createClient(nil, name)
+	if err := b.clients.store(client); err != nil {
+		return nil, err
 	}
-	if _, ok := b.clients[name]; ok {
-		return nil, ErrDuplicateName
-	}
-	client := &Client{
-		broker: b,
-		name:   name,
-	}
-	b.clients[name] = client
 	return client, nil
 }
 

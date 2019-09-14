@@ -4,8 +4,66 @@ import (
 	"sync"
 )
 
-//TODO should this func sig have BrokerAccess and or an Attribute in the parms?
 type OnAcceptFn func(interface{}) error
+
+type clients struct {
+	db   map[string]*Client
+	lock sync.RWMutex
+}
+
+func (c *clients) delete(client *Client) (error, []SubscriptionReport) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+	var reports []SubscriptionReport
+	if c.db != nil {
+		if _, ok := c.db[client.name]; ok {
+			client.subs.foreach(func(sub Subscription) bool {
+				report := SubscriptionReport{
+					Subscription: sub,
+					Error:        sub.Cancel(),
+				}
+				reports = append(reports, report)
+				return true
+			})
+			client.broker = nil
+			delete(c.db, client.name)
+			return nil, reports
+		}
+	}
+	return ErrClientNotFound, reports
+}
+
+func (c *clients) foreach(fn func(client *Client) bool) {
+	var clients []*Client
+	c.lock.RLock()
+	for _, s := range c.db {
+		clients = append(clients, s)
+	}
+	c.lock.RUnlock()
+
+	//todo there should be a write lock on the client, and a check to make sure this client still exists before the fn gets called
+	// continue as long as we get true back
+	for _, s := range clients {
+		if c := fn(s); !c {
+			return
+		}
+	}
+}
+
+func (c *clients) store(client *Client) error {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+	if c.db == nil {
+		c.db = make(map[string]*Client)
+	}
+
+	if _, ok := c.db[client.name]; ok {
+		return ErrDuplicateClient
+	}
+
+	c.db[client.name] = client
+	return nil
+}
 
 type Client struct {
 	parent *Client
@@ -14,57 +72,7 @@ type Client struct {
 	subs   subscriptions
 }
 
-type subscriptions struct {
-	db   map[string]Subscription
-	lock sync.RWMutex
-}
-
-func (c *subscriptions) cancel(sub Subscription) error {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-	if c.db != nil {
-		if _, ok := c.db[sub.filter]; ok {
-			delete(c.db, sub.filter)
-			return nil
-		}
-	}
-	return ErrNotFound("subscription")
-}
-
-func (c *subscriptions) foreach(fn func(sub Subscription) bool) {
-	c.lock.RLock()
-	defer c.lock.RUnlock()
-
-	for _, s := range c.db {
-		if c := fn(s); c {
-			return
-		}
-	}
-}
-
-func (c *subscriptions) subscribe(sub Subscription) error {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-	if c.db == nil {
-		c.db = make(map[string]Subscription)
-	}
-
-	if _, ok := c.db[sub.filter]; ok {
-		return ErrDuplicateName
-	}
-	c.db[sub.filter] = sub
-	return nil
-}
-
-func (c *Client) createSubClient(name string) *Client {
-	return &Client{
-		parent: c,
-		broker: c.broker,
-		name:   c.name + "[" + name + "]",
-	}
-}
-
-func (c *Client) Create(name string, def Definition, acceptFn OnAcceptFn) (Attribute, error, []SubscriptionReport) {
+func (c *Client) CreateAttribute(name string, def Definition, acceptFn OnAcceptFn) (Attribute, error, []SubscriptionReport) {
 	// prefix the attribute name with the Client name
 	return c.broker.createAttribute(c, c.name+"."+name, def, acceptFn)
 }
@@ -79,7 +87,7 @@ func (c *Client) Subscribe(filter string, fn OnMessageFn) (Subscription, error) 
 		filter: filter,
 		fn:     fn,
 	}
-	if err := c.subs.subscribe(sub); err != nil {
+	if err := c.subs.store(sub); err != nil {
 		return Subscription{}, err
 	}
 	return sub, nil

@@ -1,42 +1,48 @@
 package iot
 
-import "testing"
+import (
+	"fmt"
+	"testing"
+)
 
 func TestBroker_CreateClient(t *testing.T) {
 	b := Broker{}
 
-	t.Run("should create client", func(t *testing.T) {
-		client, err := b.CreateClient("test")
-		if err != nil {
-			t.Error(err)
-		}
-		if client.name != "test" {
-			t.Error("unexpected name")
-		}
+	for i := 1; i <= 10; i++ {
+		name := fmt.Sprintf("client%d", i)
+		t.Run(fmt.Sprintf("should create client %s", name), func(t *testing.T) {
+			client, err := b.CreateClient(name)
+			if err != nil {
+				t.Error(err)
+			}
 
-		if b.clients == nil {
-			t.Error("clients map should not be nil")
-		}
+			if client.name != name {
+				t.Error("unexpected name")
+			}
 
-		if len(b.clients) != 1 {
-			t.Error("invalid number of clients")
-		}
+			if b.clients.db == nil {
+				t.Fatal("clients map should not be nil")
+			}
 
-		if b.clients["test"] == nil {
-			t.Error("client not present in map")
-		}
+			if len(b.clients.db) != i {
+				t.Fatal("invalid number of clients")
+			}
 
-		if b.clients["test"].name != "test" {
-			t.Error("client did not get the correct name")
-		}
-	})
+			if b.clients.db[client.name] == nil {
+				t.Fatal("client not present in map")
+			}
 
-	t.Run("should error on duplicate name", func(t *testing.T) {
-		_, err := b.CreateClient("test")
-		if err != ErrDuplicateName {
-			t.Error("expected error on duplicate name didnt ge tone")
-		}
-	})
+			if b.clients.db[client.name].name != name {
+				t.Fatal("client did not get the correct name")
+			}
+			t.Run("should error on duplicate name", func(t *testing.T) {
+				_, err := b.CreateClient(name)
+				if err != ErrDuplicateClient {
+					t.Fatal("expected error on duplicate name didnt get one")
+				}
+			})
+		})
+	}
 }
 
 func TestBroker_List(t *testing.T) {
@@ -47,7 +53,7 @@ func TestBroker_List(t *testing.T) {
 		t.Error(err)
 	}
 	t.Run("test create undefined attribute", func(t *testing.T) {
-		attr, err, reports := client.Create("one", nil, nil)
+		attr, err, reports := client.CreateAttribute("one", nil, nil)
 		if err != nil {
 			t.Error(err)
 		}
@@ -72,7 +78,7 @@ func TestBroker_List(t *testing.T) {
 		}
 	})
 	t.Run("test create defined attribute", func(t *testing.T) {
-		attr, err, reports := client.Create("one", IntegerDefinition{Default: 1234}, nil)
+		attr, err, reports := client.CreateAttribute("one", IntegerDefinition{Default: 1234}, nil)
 		if err != nil {
 			t.Error(err)
 		}

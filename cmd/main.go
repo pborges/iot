@@ -26,10 +26,10 @@ func main() {
 		return nil
 	})
 
-	attr, _, _ := c1.Create("temp", iot.IntegerDefinition{Default: 3}, nil)
+	attr, _, _ := c1.CreateAttribute("temp", iot.IntegerDefinition{Default: 3}, nil)
 	attr.Update(55)
 
-	c4.Create("bob", iot.IntegerDefinition{}, func(i interface{}) error {
+	c4.CreateAttribute("bob", iot.IntegerDefinition{}, func(i interface{}) error {
 		fmt.Println("[AcceptFN        ] ATTR: bob VALUE:", i)
 		return nil
 	})
