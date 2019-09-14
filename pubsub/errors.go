@@ -5,6 +5,7 @@ import (
 	"fmt"
 )
 
+var ErrMismatchedDefinition = errors.New("mismatched definition")
 var ErrUnknownType = errors.New("unknown type")
 
 var ErrDuplicateClient = ErrDuplicate("owner")

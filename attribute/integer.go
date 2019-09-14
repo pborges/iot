@@ -11,6 +11,13 @@ type IntegerDefinition struct {
 	Default int64
 }
 
+func (a IntegerDefinition) Extract(d pubsub.Datum) (int64, error) {
+	if d.Def == a {
+		return d.Value.(int64), nil
+	}
+	return a.DefaultValue().(int64), pubsub.ErrMismatchedDefinition
+}
+
 func (a IntegerDefinition) DefaultValue() interface{} {
 	return a.Default
 }
