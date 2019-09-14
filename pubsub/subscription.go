@@ -1,4 +1,4 @@
-package iot
+package pubsub
 
 import (
 	"github.com/satori/go.uuid"

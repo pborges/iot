@@ -1,4 +1,4 @@
-package iot
+package pubsub
 
 import (
 	"errors"
@@ -65,7 +65,7 @@ func (b Broker) fanout(source Source, attr Attribute) []SubscriptionReport {
 				ctx.client = b.createClient(client, sub.filter)
 
 				report.Error = sub.fn(attr.name, attr.Value(), ctx)
-				fmt.Println("⤷ [OnSubscribeEvent]", "TO:", ctx.Source(), "ATTR:", attr.name, "VALUE:", attr.Value().Value, "SOURCE:", attr.Value().By.String()+"@"+attr.Value().At.Format(time.RFC822))
+				fmt.Println("⤷ [OnSubscribeEvent]", "TO:", ctx.Source(), "ATTR:", attr.name, "VALUE:", attr.Value().Value, "SOURCE:", source.String()+"@"+attr.Value().At.Format(time.RFC822))
 
 				reports = append(reports, report)
 			}
@@ -88,10 +88,10 @@ func (b *Broker) createAttribute(client *Client, name string, def Definition, ac
 	var value interface{}
 	if def != nil {
 		var err error
-		if value, err = def.Transform(def.DefaultValue()); err != nil {
+		if value, err = attr.Transform(attr.DefaultValue()); err != nil {
 			return Attribute{}, err, nil
 		}
-		value = def.DefaultValue()
+		value = attr.DefaultValue()
 	}
 
 	if b.attributes == nil {

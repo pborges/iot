@@ -1,6 +1,8 @@
-package iot
+package pubsub
 
-import "time"
+import (
+	"time"
+)
 
 type Datum struct {
 	Owner string

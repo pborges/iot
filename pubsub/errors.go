@@ -1,8 +1,11 @@
-package iot
+package pubsub
 
 import (
+	"errors"
 	"fmt"
 )
+
+var ErrUnknownType = errors.New("unknown type")
 
 var ErrDuplicateClient = ErrDuplicate("owner")
 var ErrClientNotFound = ErrNotFound("owner")

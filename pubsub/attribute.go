@@ -1,4 +1,4 @@
-package iot
+package pubsub
 
 type Attribute struct {
 	Definition
@@ -16,7 +16,7 @@ func (k Attribute) Value() Datum {
 }
 
 func (k Attribute) Update(value interface{}) (error, []SubscriptionReport) {
-	value, err := k.Definition.Transform(value)
+	value, err := k.Transform(value)
 	if err != nil {
 		return err, nil
 	}

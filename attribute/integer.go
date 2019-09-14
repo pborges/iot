@@ -1,6 +1,9 @@
-package iot
+package attribute
 
-import "errors"
+import (
+	"errors"
+	"github.com/pborges/iot/pubsub"
+)
 
 type IntegerDefinition struct {
 	Min     int64
@@ -25,8 +28,12 @@ func (a IntegerDefinition) Transform(value interface{}) (interface{}, error) {
 		data = int64(i)
 	case int64:
 		data = i
+	case float32:
+		data = int64(i)
+	case float64:
+		data = int64(i)
 	default:
-		return nil, errors.New("unknown type")
+		return nil, pubsub.ErrUnknownType
 	}
 	if a.Min != 0 || a.Max != 0 {
 		if data < a.Min {
