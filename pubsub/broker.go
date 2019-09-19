@@ -57,15 +57,17 @@ func (b Broker) fanout(source Source, attr Attribute) []SubscriptionReport {
 
 	b.clients.foreach(func(client *Client) bool {
 		client.subs.foreach(func(sub Subscription) bool {
-			if KeyMatch(attr.name, sub.filter) {
+			// dont fanout to yourself
+			if attr.owner.name != client.name && KeyMatch(attr.name, sub.filter) {
 				report := SubscriptionReport{Subscription: sub}
 				ctx := Context{
 					source: SubscriptionSource{sub: sub},
 				}
 				ctx.client = b.createClient(client, sub.filter)
-
-				report.Error = sub.fn(attr.name, attr.Value(), ctx)
-				fmt.Println("⤷ [OnSubscribeEvent]", "TO:", ctx.Source(), "ATTR:", attr.name, "VALUE:", attr.Value().Value, "SOURCE:", source.String()+"@"+attr.Value().At.Format(time.RFC822))
+				if sub.fn != nil {
+					report.Error = sub.fn(attr.name, attr.Value(), ctx)
+				}
+				fmt.Println("⤷ [OnSubscribeEvent]", "TO:", ctx.Source(), "ATTR:", attr.name, "VALUE:", attr.Value().Value, "SOURCE:", source.String()+"@"+attr.Value().At.Format(time.RFC822), "ERROR:", report.Error)
 
 				reports = append(reports, report)
 			}
