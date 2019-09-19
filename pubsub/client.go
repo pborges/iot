@@ -4,7 +4,7 @@ import (
 	"sync"
 )
 
-type OnAcceptFn func(interface{}) error
+type OnAcceptFn func(Source, interface{}) error
 
 type clients struct {
 	db   map[string]*Client
@@ -70,6 +70,10 @@ type Client struct {
 	broker *Broker
 	name   string
 	subs   subscriptions
+}
+
+func (c Client) Name() string {
+	return c.name
 }
 
 func (c *Client) CreateAttribute(name string, def Definition, acceptFn OnAcceptFn) (Attribute, error, []SubscriptionReport) {

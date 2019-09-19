@@ -77,7 +77,7 @@ func (b Broker) fanout(source Source, attr Attribute) []SubscriptionReport {
 	return reports
 }
 
-func (b *Broker) createAttribute(client *Client, name string, def Definition, acceptFn func(interface{}) error) (Attribute, error, []SubscriptionReport) {
+func (b *Broker) createAttribute(client *Client, name string, def Definition, acceptFn OnAcceptFn) (Attribute, error, []SubscriptionReport) {
 	attr := Attribute{name: name, owner: client, Definition: def, fn: acceptFn}
 
 	// validate the default value if we have a definition
@@ -120,7 +120,9 @@ func (b *Broker) publish(source Source, name string, value interface{}) (error, 
 
 		// try to run the accept fn
 		if attr.fn != nil {
-			if err := attr.fn(value); err != nil {
+			err := attr.fn(source, value)
+			fmt.Println("[AcceptFN          ] OWNER:", attr.owner.Name(), "ATTR:", attr.name, " VALUE:", value, "FROM:", source, "ERROR:", err)
+			if err != nil {
 				return err, nil
 			}
 		}
