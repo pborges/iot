@@ -58,16 +58,20 @@ func (b Broker) fanout(source Source, attr Attribute) []SubscriptionReport {
 	b.clients.foreach(func(client *Client) bool {
 		client.subs.foreach(func(sub Subscription) bool {
 			// dont fanout to yourself
-			if attr.owner.name != client.name && KeyMatch(attr.name, sub.filter) {
+			if attr.owner.name != source.Client() && KeyMatch(attr.name, sub.filter) {
+				//if KeyMatch(attr.name, sub.filter) {
 				report := SubscriptionReport{Subscription: sub}
 				ctx := Context{
 					source: SubscriptionSource{sub: sub},
 				}
 				ctx.client = b.createClient(client, sub.filter)
+				fmt.Println("⤷ [OnSubscribeEvent]", source, "->", ctx.source, "@"+attr.Value().At.Format(time.Stamp), "ATTR:", attr.name, "VALUE:", attr.Value().Value)
 				if sub.fn != nil {
 					report.Error = sub.fn(attr.name, attr.Value(), ctx)
+					if report.Error != nil {
+						fmt.Println("[OnSubscriptionEvent] ERROR:", report.Error)
+					}
 				}
-				fmt.Println("⤷ [OnSubscribeEvent]", "TO:", ctx.Source(), "ATTR:", attr.name, "VALUE:", attr.Value().Value, "SOURCE:", source.String()+"@"+attr.Value().At.Format(time.RFC822), "ERROR:", report.Error)
 
 				reports = append(reports, report)
 			}
@@ -102,18 +106,18 @@ func (b *Broker) createAttribute(client *Client, name string, def Definition, ac
 }
 
 func (b *Broker) selfUpdateAndFanout(by *Client, attr Attribute, value interface{}) (error, []SubscriptionReport) {
-	fmt.Println("[SelfUpdate        ] ATTR:", attr.name, "VALUE:", value)
 	// update the value
 	source := ClientSource{client: by, self: true}
 	b.setAttributeValue(source, attr, value)
+	fmt.Println("[SelfUpdate        ]", source, "->", source, "@"+attr.Value().At.Format(time.Stamp), "ATTR:", attr.name, "VALUE:", value)
 
 	// fanout
 	return nil, b.fanout(source, attr)
 }
 
 func (b *Broker) publish(source Source, name string, value interface{}) (error, []SubscriptionReport) {
-	fmt.Println("[Publish           ] ATTR:", name, "VALUE:", value, "SOURCE:", source)
 	if attr, ok := b.attributes[name]; ok {
+		fmt.Println("[Publish           ]", source, "->", attr.owner.name, "@"+attr.Value().At.Format(time.Stamp), "ATTR:", name, "VALUE:", value)
 		// validate the value
 		var err error
 		if value, err = attr.Transform(value); err != nil {
@@ -122,9 +126,10 @@ func (b *Broker) publish(source Source, name string, value interface{}) (error, 
 
 		// try to run the accept fn
 		if attr.fn != nil {
+			fmt.Println("[AcceptFN          ]", source, "->", attr.owner.name, "@"+attr.Value().At.Format(time.Stamp), "ATTR:", attr.name, "VALUE:", value)
 			err := attr.fn(source, value)
-			fmt.Println("[AcceptFN          ] OWNER:", attr.owner.Name(), "ATTR:", attr.name, " VALUE:", value, "FROM:", source, "ERROR:", err)
 			if err != nil {
+				fmt.Println("[AcceptFN          ] ERROR:", err)
 				return err, nil
 			}
 		}
