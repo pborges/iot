@@ -7,12 +7,8 @@ type Source interface {
 
 type ClientSource struct {
 	client *Client
-	self   bool
 }
 
-func (a ClientSource) IsSelf() bool {
-	return a.self
-}
 func (a ClientSource) Client() string {
 	return a.client.name
 }

@@ -20,5 +20,5 @@ func (k Attribute) Update(value interface{}) (error, []SubscriptionReport) {
 	if err != nil {
 		return err, nil
 	}
-	return k.owner.broker.selfUpdateAndFanout(k.owner, k, value)
+	return k.owner.broker.selfUpdateAndFanout(k, value)
 }

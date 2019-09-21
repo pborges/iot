@@ -58,7 +58,7 @@ func (b Broker) fanout(source Source, attr Attribute) []SubscriptionReport {
 	b.clients.foreach(func(client *Client) bool {
 		client.subs.foreach(func(sub Subscription) bool {
 			// dont fanout to yourself
-			if attr.owner.name != source.Client() && KeyMatch(attr.name, sub.filter) {
+			if attr.owner.name != client.name && KeyMatch(attr.name, sub.filter) {
 				//if KeyMatch(attr.name, sub.filter) {
 				report := SubscriptionReport{Subscription: sub}
 				ctx := Context{
@@ -101,13 +101,13 @@ func (b *Broker) createAttribute(client *Client, name string, def Definition, ac
 	}
 	b.attributes[attr.name] = attr
 
-	err, reports := b.selfUpdateAndFanout(client, attr, value)
+	err, reports := b.selfUpdateAndFanout(attr, value)
 	return attr, err, reports
 }
 
-func (b *Broker) selfUpdateAndFanout(by *Client, attr Attribute, value interface{}) (error, []SubscriptionReport) {
+func (b *Broker) selfUpdateAndFanout(attr Attribute, value interface{}) (error, []SubscriptionReport) {
 	// update the value
-	source := ClientSource{client: by, self: true}
+	source := ClientSource{client: attr.owner}
 	b.setAttributeValue(source, attr, value)
 	fmt.Println("[SelfUpdate        ]", source, "->", source, "@"+attr.Value().At.Format(time.Stamp), "ATTR:", attr.name, "VALUE:", value)
 
