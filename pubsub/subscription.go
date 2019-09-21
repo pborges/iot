@@ -2,7 +2,6 @@ package pubsub
 
 import (
 	"github.com/satori/go.uuid"
-	"sync"
 )
 
 type OnMessageFn func(name string, value Datum, b Context) error
@@ -13,13 +12,10 @@ type SubscriptionReport struct {
 }
 
 type subscriptions struct {
-	db   map[string]Subscription
-	lock sync.RWMutex
+	db map[string]Subscription
 }
 
 func (c *subscriptions) delete(sub Subscription) error {
-	c.lock.Lock()
-	defer c.lock.Unlock()
 	if c.db != nil {
 		if _, ok := c.db[sub.id]; ok {
 			delete(c.db, sub.id)
@@ -30,9 +26,6 @@ func (c *subscriptions) delete(sub Subscription) error {
 }
 
 func (c *subscriptions) foreach(fn func(sub Subscription) bool) {
-	c.lock.RLock()
-	defer c.lock.RUnlock()
-
 	for _, s := range c.db {
 		// continue as long as we get true back
 		if c := fn(s); !c {
@@ -42,8 +35,6 @@ func (c *subscriptions) foreach(fn func(sub Subscription) bool) {
 }
 
 func (c *subscriptions) store(sub Subscription) error {
-	c.lock.Lock()
-	defer c.lock.Unlock()
 	if c.db == nil {
 		c.db = make(map[string]Subscription)
 	}

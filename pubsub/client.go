@@ -1,19 +1,12 @@
 package pubsub
 
-import (
-	"sync"
-)
-
 type OnAcceptFn func(Source, interface{}) error
 
 type clients struct {
-	db   map[string]*Client
-	lock sync.RWMutex
+	db map[string]*Client
 }
 
 func (c *clients) delete(client *Client) (error, []SubscriptionReport) {
-	c.lock.Lock()
-	defer c.lock.Unlock()
 	var reports []SubscriptionReport
 	if c.db != nil {
 		if _, ok := c.db[client.name]; ok {
@@ -34,16 +27,7 @@ func (c *clients) delete(client *Client) (error, []SubscriptionReport) {
 }
 
 func (c *clients) foreach(fn func(client *Client) bool) {
-	var clients []*Client
-	c.lock.RLock()
 	for _, s := range c.db {
-		clients = append(clients, s)
-	}
-	c.lock.RUnlock()
-
-	//todo there should be a write lock on the owner, and a check to make sure this owner still exists before the fn gets called
-	// continue as long as we get true back
-	for _, s := range clients {
 		if c := fn(s); !c {
 			return
 		}
@@ -51,8 +35,6 @@ func (c *clients) foreach(fn func(client *Client) bool) {
 }
 
 func (c *clients) store(client *Client) error {
-	c.lock.Lock()
-	defer c.lock.Unlock()
 	if c.db == nil {
 		c.db = make(map[string]*Client)
 	}
