@@ -19,8 +19,8 @@ func (c *clients) delete(client *Client) (error, []SubscriptionReport) {
 		if _, ok := c.db[client.name]; ok {
 			client.subs.foreach(func(sub Subscription) bool {
 				report := SubscriptionReport{
-					Subscription: sub,
-					Error:        sub.Cancel(),
+					Source: SubscriptionSource{sub: sub},
+					Error:  sub.Cancel(),
 				}
 				reports = append(reports, report)
 				return true

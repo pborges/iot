@@ -8,7 +8,7 @@ import (
 type OnMessageFn func(name string, value Datum, b Context) error
 
 type SubscriptionReport struct {
-	Subscription
+	Source
 	Error error
 }
 

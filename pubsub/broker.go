@@ -56,27 +56,29 @@ func (b Broker) fanout(source Source, attr Attribute) []SubscriptionReport {
 	reports := make([]SubscriptionReport, 0)
 
 	b.clients.foreach(func(client *Client) bool {
-		client.subs.foreach(func(sub Subscription) bool {
-			// dont fanout to yourself
-			if attr.owner.name != client.name && KeyMatch(attr.name, sub.filter) {
-				//if KeyMatch(attr.name, sub.filter) {
-				report := SubscriptionReport{Subscription: sub}
-				ctx := Context{
-					source: SubscriptionSource{sub: sub},
-				}
-				ctx.client = b.createClient(client, sub.filter)
-				fmt.Println("⤷ [OnSubscribeEvent]", source, "->", ctx.source, "@"+attr.Value().At.Format(time.Stamp), "ATTR:", attr.name, "VALUE:", attr.Value().Value)
-				if sub.fn != nil {
-					report.Error = sub.fn(attr.name, attr.Value(), ctx)
-					if report.Error != nil {
-						fmt.Println("[OnSubscriptionEvent] ERROR:", report.Error)
+		// dont fanout to yourself
+		if attr.owner.name != client.name {
+			client.subs.foreach(func(sub Subscription) bool {
+				if KeyMatch(attr.name, sub.filter) {
+					//if KeyMatch(attr.name, sub.filter) {
+					ctx := Context{
+						source: SubscriptionSource{sub: sub},
 					}
-				}
+					report := SubscriptionReport{Source: ctx.source}
+					ctx.client = b.createClient(client, sub.filter)
+					fmt.Println("⤷ [OnSubscribeEvent]", source, "->", ctx.source, "@"+attr.Value().At.Format(time.Stamp), "ATTR:", attr.name, "VALUE:", attr.Value().Value)
+					if sub.fn != nil {
+						report.Error = sub.fn(attr.name, attr.Value(), ctx)
+						if report.Error != nil {
+							fmt.Println("[OnSubscriptionEvent] ERROR:", report.Error)
+						}
+					}
 
-				reports = append(reports, report)
-			}
-			return true
-		})
+					reports = append(reports, report)
+				}
+				return true
+			})
+		}
 		return true
 	})
 
