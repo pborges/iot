@@ -1,5 +1,11 @@
 package pubsub
 
+import (
+	"github.com/robfig/cron"
+	uuid "github.com/satori/go.uuid"
+	"time"
+)
+
 type OnAcceptFn func(Source, interface{}) error
 
 type clients struct {
@@ -48,10 +54,11 @@ func (c *clients) store(client *Client) error {
 }
 
 type Client struct {
-	parent *Client
-	broker *Broker
-	name   string
-	subs   subscriptions
+	parent      *Client
+	broker      *Broker
+	name        string
+	subs        subscriptions
+	cronEntries map[string]cron.EntryID
 }
 
 func (c Client) Name() string {
@@ -78,4 +85,47 @@ func (c *Client) Subscribe(id string, filter string, fns ...OnMessageFn) (Subscr
 		return Subscription{}, err
 	}
 	return sub, nil
+}
+
+func (c *Client) schedule(schedule cron.Schedule, fn func(ctx Context)) error {
+	id, err := uuid.NewV4()
+	if err != nil {
+		return err
+	}
+	entry := c.broker.schedule(schedule, func() {
+		ctx := Context{
+			source: CronSource{
+				client: c,
+				id:     id.String(),
+			},
+			client: c,
+		}
+		fn(ctx)
+	})
+	c.cronEntries[id.String()] = entry
+	return err
+}
+
+func (c *Client) Schedule(at time.Time, fn func(ctx Context)) error {
+	return c.schedule(atSpecificTime(at), func(ctx Context) {
+		fn(ctx)
+		c.cancelCron(ctx.source.(CronSource).id)
+	})
+}
+
+func (c *Client) ScheduleEvery(every time.Duration, fn func(ctx Context)) error {
+	return c.schedule(cron.Every(every), fn)
+}
+
+func (c *Client) cancelCron(id string) {
+	c.broker.cron.Remove(c.cronEntries[id])
+}
+
+type atSpecificTime time.Time
+
+func (a atSpecificTime) Next(t time.Time) time.Time {
+	if t.Before(time.Time(a)) {
+		return time.Time(a)
+	}
+	return time.Time{}
 }

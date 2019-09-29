@@ -3,6 +3,7 @@ package pubsub
 import (
 	"errors"
 	"fmt"
+	"github.com/robfig/cron"
 	"time"
 )
 
@@ -10,6 +11,7 @@ type Broker struct {
 	attributes map[string]Attribute
 	values     map[string]Datum
 	clients    clients
+	cron       *cron.Cron
 }
 
 // delete the attribute from the map, but leave the value
@@ -46,9 +48,10 @@ func (b *Broker) createClient(parent *Client, name string) *Client {
 		name = parent.name + "[" + name + "]"
 	}
 	return &Client{
-		parent: parent,
-		broker: b,
-		name:   name,
+		cronEntries: map[string]cron.EntryID{},
+		parent:      parent,
+		broker:      b,
+		name:        name,
 	}
 }
 
@@ -122,8 +125,10 @@ func (b *Broker) publish(source Source, name string, value interface{}) (error, 
 		fmt.Println("[Publish           ]", source, "->", attr.owner.name, "@"+attr.Value().At.Format(time.Stamp), "ATTR:", name, "VALUE:", value)
 		// validate the value
 		var err error
-		if value, err = attr.Transform(value); err != nil {
-			return err, nil
+		if attr.Definition != nil {
+			if value, err = attr.Transform(value); err != nil {
+				return err, nil
+			}
 		}
 
 		// try to run the accept fns
@@ -163,4 +168,12 @@ func (b Broker) List(filter string) []Datum {
 		}
 	}
 	return data
+}
+
+func (b *Broker) schedule(schedule cron.Schedule, fn func()) cron.EntryID {
+	if b.cron == nil {
+		b.cron = cron.New(cron.WithSeconds())
+		b.cron.Start()
+	}
+	return b.cron.Schedule(schedule, cron.FuncJob(fn))
 }

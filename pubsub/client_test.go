@@ -3,6 +3,7 @@ package pubsub
 import (
 	"fmt"
 	"testing"
+	"time"
 )
 
 func getTestClient(t *testing.T, broker *Broker, ord int) *Client {
@@ -156,4 +157,75 @@ func TestClient_ShouldNotGetOwnMessage(t *testing.T) {
 	if c3sub.Value.(int64) != 60 {
 		t.Fatalf("c3 should have gotten the fanout, but its value is %d", c3sub.Value)
 	}
+}
+
+// not really a unit test.. more of a demo
+func TestClient_Schedule(t *testing.T) {
+	var broker Broker
+	c1 := getTestClient(t, &broker, 1)
+
+	done := make(chan interface{})
+
+	c1.CreateAttribute("test", nil, func(src Source, val interface{}) error {
+		done <- true
+		return nil
+	})
+
+	c1.Schedule(time.Now().Add(time.Second*2), func(ctx Context) {
+		ctx.Publish("owner1.test", 55)
+	})
+
+	<-done
+	fmt.Printf("%+v\n", c1.cronEntries)
+}
+
+// not really a unit test.. more of a demo
+func TestClient_ScheduleEvery(t *testing.T) {
+	var broker Broker
+	c1 := getTestClient(t, &broker, 1)
+
+	done := make(chan interface{})
+
+	c1.CreateAttribute("test", nil, func(src Source, val interface{}) error {
+		done <- true
+		return nil
+	})
+
+	v := 3
+	c1.ScheduleEvery(time.Second, func(ctx Context) {
+		ctx.Publish("owner1.test", v)
+		v += 1
+	})
+
+	<-done
+	<-done
+	<-done
+	fmt.Printf("%+v\n", c1.cronEntries)
+}
+
+// not really a unit test.. more of a demo
+func TestClient_ScheduleFromSub(t *testing.T) {
+	var broker Broker
+	c1 := getTestClient(t, &broker, 1)
+	c2 := getTestClient(t, &broker, 2)
+
+	done := make(chan interface{})
+
+	c1.CreateAttribute("test", nil)
+	c1.CreateAttribute("test2", nil, func(source Source, i interface{}) error {
+		done <- true
+		return nil
+	})
+
+	c2.Subscribe("sub1", "*.test", func(name string, value Datum, b Context) error {
+		b.Schedule(time.Now().Add(2*time.Second), func(ctx Context) {
+			ctx.Publish("owner1.test2", 3333)
+		})
+		return nil
+	})
+
+	c1.Publish("owner1.test", 3)
+
+	<-done
+	fmt.Printf("%+v\n", c1.cronEntries)
 }

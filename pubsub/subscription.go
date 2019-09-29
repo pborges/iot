@@ -1,5 +1,7 @@
 package pubsub
 
+import "time"
+
 type OnMessageFn func(name string, value Datum, b Context) error
 
 type SubscriptionReport struct {
@@ -79,4 +81,11 @@ func (ctx Context) Publish(name string, value interface{}) (error, []Subscriptio
 
 func (ctx Context) List(filter string) []Datum {
 	return ctx.client.broker.List(filter)
+}
+
+func (ctx Context) Schedule(at time.Time, fn func(ctx Context)) error {
+	return ctx.client.schedule(atSpecificTime(at), func(ctx Context) {
+		fn(ctx)
+		ctx.client.cancelCron(ctx.source.(CronSource).id)
+	})
 }
