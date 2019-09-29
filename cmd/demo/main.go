@@ -15,18 +15,18 @@ func main() {
 	c4, _ := broker.CreateClient("client4")
 	c5, _ := broker.CreateClient("client5")
 
-	c2.Subscribe(">", func(name string, value pubsub.Datum, ctx pubsub.Context) error {
+	c2.Subscribe("sub1", ">", func(name string, value pubsub.Datum, ctx pubsub.Context) error {
 		return nil
 	})
-	c2.Subscribe(">", func(name string, value pubsub.Datum, ctx pubsub.Context) error {
-		return nil
-	})
-
-	c3.Subscribe(">", func(name string, value pubsub.Datum, ctx pubsub.Context) error {
+	c2.Subscribe("sub2", ">", func(name string, value pubsub.Datum, ctx pubsub.Context) error {
 		return nil
 	})
 
-	c4.Subscribe("*.bob", func(name string, value pubsub.Datum, ctx pubsub.Context) error {
+	c3.Subscribe("sub1", ">", func(name string, value pubsub.Datum, ctx pubsub.Context) error {
+		return nil
+	})
+
+	c4.Subscribe("sub1", "*.bob", func(name string, value pubsub.Datum, ctx pubsub.Context) error {
 		fmt.Println("\nDEBUG publish from subscription")
 		ctx.Publish("client1.temp", 99)
 		return nil
@@ -50,7 +50,7 @@ func main() {
 	fmt.Println("\nDEBUG client publish")
 	c2.Publish("client4.bob", 666)
 
-	c5.Subscribe("client4.*")
+	c5.Subscribe("sub1", "client4.*")
 
 	for i := 0; i < 5; i++ {
 		fmt.Println("\nDEBUG client publish")
@@ -58,4 +58,10 @@ func main() {
 	}
 
 	fmt.Println("done")
+	fmt.Println()
+	fmt.Println("list all keys")
+
+	for _, d := range broker.List(">") {
+		fmt.Println(d.Name, d.Value)
+	}
 }

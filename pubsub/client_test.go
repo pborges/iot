@@ -24,21 +24,21 @@ func TestClient_PublishAndFanout(t *testing.T) {
 	var c3Subscribe int64
 	var c4Subscribe int64
 
-	if _, err := c2.Subscribe(">", func(name string, value Datum, res Context) error {
+	if _, err := c2.Subscribe("sub1", ">", func(name string, value Datum, res Context) error {
 		c2Subscribe = value.Value.(int64)
 		return nil
 	}); err != nil {
 		t.Error(err)
 	}
 
-	if _, err := c3.Subscribe(">", func(name string, value Datum, res Context) error {
+	if _, err := c3.Subscribe("sub1", ">", func(name string, value Datum, res Context) error {
 		c3Subscribe = value.Value.(int64)
 		return nil
 	}); err != nil {
 		t.Error(err)
 	}
 
-	if _, err := c4.Subscribe("bob", func(name string, value Datum, res Context) error {
+	if _, err := c4.Subscribe("sub1", "bob", func(name string, value Datum, res Context) error {
 		c4Subscribe = value.Value.(int64)
 		return nil
 	}); err != nil {
@@ -89,21 +89,21 @@ func TestClient_ShouldNotGetOwnMessage(t *testing.T) {
 	c3 := getTestClient(t, &broker, 3)
 	var c3sub Datum
 
-	_, err := c1.Subscribe(">", func(name string, value Datum, b Context) error {
+	_, err := c1.Subscribe("sub1", ">", func(name string, value Datum, b Context) error {
 		c1sub = value
 		return nil
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = c2.Subscribe(">", func(name string, value Datum, b Context) error {
+	_, err = c2.Subscribe("sub1", ">", func(name string, value Datum, b Context) error {
 		c2sub = value
 		return nil
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = c3.Subscribe(">", func(name string, value Datum, b Context) error {
+	_, err = c3.Subscribe("sub1", ">", func(name string, value Datum, b Context) error {
 		c3sub = value
 		return nil
 	})

@@ -1,9 +1,5 @@
 package pubsub
 
-import (
-	"github.com/satori/go.uuid"
-)
-
 type OnMessageFn func(name string, value Datum, b Context) error
 
 type SubscriptionReport struct {
@@ -37,12 +33,6 @@ func (c *subscriptions) foreach(fn func(sub Subscription) bool) {
 func (c *subscriptions) store(sub Subscription) error {
 	if c.db == nil {
 		c.db = make(map[string]Subscription)
-	}
-
-	if id, err := uuid.NewV4(); err == nil {
-		sub.id = id.String()
-	} else {
-		return err
 	}
 
 	if _, ok := c.db[sub.id]; ok {

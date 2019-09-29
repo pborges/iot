@@ -67,9 +67,10 @@ func (c *Client) Publish(name string, value interface{}) (error, []SubscriptionR
 	return c.broker.publish(ClientSource{client: c}, name, value)
 }
 
-func (c *Client) Subscribe(filter string, fns ...OnMessageFn) (Subscription, error) {
+func (c *Client) Subscribe(id string, filter string, fns ...OnMessageFn) (Subscription, error) {
 	sub := Subscription{
 		client: c,
+		id:     id,
 		filter: filter,
 		fns:    fns,
 	}

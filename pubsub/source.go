@@ -32,5 +32,5 @@ func (a SubscriptionSource) Client() string {
 }
 
 func (a SubscriptionSource) String() string {
-	return a.sub.client.name + "[" + a.sub.filter + "]{" + a.sub.id + "}"
+	return a.sub.client.name + "[" + a.sub.id + ":" + a.sub.filter + "]"
 }
