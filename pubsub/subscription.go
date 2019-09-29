@@ -57,7 +57,7 @@ type Subscription struct {
 	id     string
 	filter string
 	client *Client
-	fn     OnMessageFn
+	fns    []OnMessageFn
 }
 
 func (s Subscription) Id() string {

@@ -66,9 +66,9 @@ func (b Broker) fanout(source Source, attr Attribute) []SubscriptionReport {
 					}
 					report := SubscriptionReport{Source: ctx.source}
 					ctx.client = b.createClient(client, sub.filter)
-					fmt.Println("⤷ [OnSubscribeEvent]", source, "->", ctx.source, "@"+attr.Value().At.Format(time.Stamp), "ATTR:", attr.name, "VALUE:", attr.Value().Value)
-					if sub.fn != nil {
-						report.Error = sub.fn(attr.name, attr.Value(), ctx)
+					for _, fn := range sub.fns {
+						fmt.Println("⤷ [OnSubscribeEvent]", source, "->", ctx.source, "@"+attr.Value().At.Format(time.Stamp), "ATTR:", attr.name, "VALUE:", attr.Value().Value)
+						report.Error = fn(attr.name, attr.Value(), ctx)
 						if report.Error != nil {
 							fmt.Println("[OnSubscriptionEvent] ERROR:", report.Error)
 						}
@@ -85,8 +85,8 @@ func (b Broker) fanout(source Source, attr Attribute) []SubscriptionReport {
 	return reports
 }
 
-func (b *Broker) createAttribute(client *Client, name string, def Definition, acceptFn OnAcceptFn) (Attribute, error, []SubscriptionReport) {
-	attr := Attribute{name: name, owner: client, Definition: def, fn: acceptFn}
+func (b *Broker) createAttribute(client *Client, name string, def Definition, acceptFns ...OnAcceptFn) (Attribute, error, []SubscriptionReport) {
+	attr := Attribute{name: name, owner: client, Definition: def, fns: acceptFns}
 
 	// validate the default value if we have a definition
 	var value interface{}
@@ -126,10 +126,10 @@ func (b *Broker) publish(source Source, name string, value interface{}) (error, 
 			return err, nil
 		}
 
-		// try to run the accept fn
-		if attr.fn != nil {
+		// try to run the accept fns
+		for _, fn := range attr.fns {
 			fmt.Println("[AcceptFN          ]", source, "->", attr.owner.name, "@"+attr.Value().At.Format(time.Stamp), "ATTR:", attr.name, "VALUE:", value)
-			err := attr.fn(source, value)
+			err := fn(source, value)
 			if err != nil {
 				fmt.Println("[AcceptFN          ] ERROR:", err)
 				return err, nil

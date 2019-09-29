@@ -33,7 +33,7 @@ func main() {
 	})
 
 	fmt.Println("DEBUG create attribute")
-	attr, _, _ := c1.CreateAttribute("temp", pubsub.IntegerDefinition{Default: 3}, nil)
+	attr, _, _ := c1.CreateAttribute("temp", pubsub.IntegerDefinition{Default: 3})
 	fmt.Println("\nDEBUG self update")
 	attr.Update(55)
 
@@ -50,7 +50,7 @@ func main() {
 	fmt.Println("\nDEBUG client publish")
 	c2.Publish("client4.bob", 666)
 
-	c5.Subscribe("client4.*", nil)
+	c5.Subscribe("client4.*")
 
 	for i := 0; i < 5; i++ {
 		fmt.Println("\nDEBUG client publish")

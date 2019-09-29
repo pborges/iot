@@ -4,7 +4,7 @@ type Attribute struct {
 	Definition
 	name  string
 	owner *Client
-	fn    OnAcceptFn
+	fns   []OnAcceptFn
 }
 
 func (k Attribute) Cancel() error {

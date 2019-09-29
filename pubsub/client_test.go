@@ -112,7 +112,7 @@ func TestClient_ShouldNotGetOwnMessage(t *testing.T) {
 	}
 
 	def := IntegerDefinition{Default: 55}
-	_, err, reports := c1.CreateAttribute("test", def, nil)
+	_, err, reports := c1.CreateAttribute("test", def)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -58,20 +58,20 @@ func (c Client) Name() string {
 	return c.name
 }
 
-func (c *Client) CreateAttribute(name string, def Definition, acceptFn OnAcceptFn) (Attribute, error, []SubscriptionReport) {
+func (c *Client) CreateAttribute(name string, def Definition, acceptFns ...OnAcceptFn) (Attribute, error, []SubscriptionReport) {
 	// prefix the attribute name with the Client name
-	return c.broker.createAttribute(c, c.name+"."+name, def, acceptFn)
+	return c.broker.createAttribute(c, c.name+"."+name, def, acceptFns...)
 }
 
 func (c *Client) Publish(name string, value interface{}) (error, []SubscriptionReport) {
 	return c.broker.publish(ClientSource{client: c}, name, value)
 }
 
-func (c *Client) Subscribe(filter string, fn OnMessageFn) (Subscription, error) {
+func (c *Client) Subscribe(filter string, fns ...OnMessageFn) (Subscription, error) {
 	sub := Subscription{
 		client: c,
 		filter: filter,
-		fn:     fn,
+		fns:    fns,
 	}
 	if err := c.subs.store(sub); err != nil {
 		return Subscription{}, err
