@@ -2,12 +2,12 @@ package main
 
 import (
 	"fmt"
-	"github.com/pborges/iot"
+	"github.com/pborges/iot/espiot"
 	"log"
 )
 
 func main() {
-	devs, err := iot.Discover("192.168.1.0/24")
+	devs, err := espiot.Discover("192.168.1.0/24")
 	if err != nil {
 		log.Println(err)
 	}

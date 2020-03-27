@@ -1,4 +1,4 @@
-package iot
+package espiot
 
 type Function struct {
 	Name string
