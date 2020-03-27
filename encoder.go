@@ -1,4 +1,4 @@
-package esp
+package iot
 
 import (
 	"errors"
@@ -11,10 +11,10 @@ type Command struct {
 	Args map[string]string
 }
 
-func Encode(c Command) string {
-	s := make([]string, 0, len(c.Args)+1)
-	s = append(s, sanitize(c.Name))
-	for k, v := range c.Args {
+func Encode(p Packet) string {
+	s := make([]string, 0, len(p.Args)+1)
+	s = append(s, sanitize(p.Command))
+	for k, v := range p.Args {
 		s = append(s, encodeKey(k, v))
 	}
 	return fmt.Sprint(strings.Join(s, " "))
@@ -37,10 +37,10 @@ var tokDecodeCommand tokenizerState = 0
 var tokDecodeKey tokenizerState = 1
 var tokDecodeValue tokenizerState = 2
 
-func Decode(str string) (Command, error) {
+func Decode(str string) (Packet, error) {
 	var state tokenizerState
-	var cmd Command
-	cmd.Args = make(map[string]string)
+	var p Packet
+	p.Args = make(map[string]string)
 	var key string
 	var value string
 	var inQuote bool
@@ -48,7 +48,7 @@ func Decode(str string) (Command, error) {
 		switch state {
 		case tokDecodeCommand:
 			if c != ' ' {
-				cmd.Name = cmd.Name + string(c)
+				p.Command = p.Command + string(c)
 			} else {
 				state++
 			}
@@ -62,12 +62,12 @@ func Decode(str string) (Command, error) {
 				}
 			case ' ':
 				if !inQuote {
-					return cmd, errors.New("unexpected space in key")
+					return p, errors.New("unexpected space in key")
 				}
 				key += string(c)
 			case ':':
 				if inQuote {
-					return cmd, errors.New("unclosed quote")
+					return p, errors.New("unclosed quote")
 				}
 				inQuote = false
 				state = tokDecodeValue
@@ -84,7 +84,7 @@ func Decode(str string) (Command, error) {
 				}
 			case ' ':
 				if !inQuote {
-					cmd.Args[key] = value
+					p.Args[key] = value
 					key, value = "", ""
 					inQuote = false
 					state = tokDecodeKey
@@ -96,6 +96,6 @@ func Decode(str string) (Command, error) {
 			}
 		}
 	}
-	cmd.Args[key] = value
-	return cmd, nil
+	p.Args[key] = value
+	return p, nil
 }
