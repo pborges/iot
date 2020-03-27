@@ -14,8 +14,10 @@ type Command struct {
 func Encode(p Packet) string {
 	s := make([]string, 0, len(p.Args)+1)
 	s = append(s, sanitize(p.Command))
-	for k, v := range p.Args {
-		s = append(s, encodeKey(k, v))
+	if p.Args != nil {
+		for k, v := range p.Args {
+			s = append(s, encodeKey(k, v))
+		}
 	}
 	return fmt.Sprint(strings.Join(s, " "))
 }
