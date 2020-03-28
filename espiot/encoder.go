@@ -98,6 +98,8 @@ func Decode(str string) (Packet, error) {
 			}
 		}
 	}
-	p.Args[key] = value
+	if key != "" {
+		p.Args[key] = value
+	}
 	return p, nil
 }

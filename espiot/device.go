@@ -81,11 +81,13 @@ type Device struct {
 	functions  map[string]Function
 
 	lastWrite time.Time
+	lastRead  time.Time
 	connected bool
 
 	control      chan Packet
 	onConnect    func()
 	onDisconnect func()
+	onUpdate     func(AttributeAndValue)
 }
 
 func (d *Device) writeCommandAndReadResponse(conn net.Conn, p Packet) ([]Packet, error) {
@@ -147,6 +149,9 @@ func (d *Device) OnConnect(fn func()) {
 			fn()
 		}
 	}
+	if d.connected {
+		fn()
+	}
 }
 
 func (d *Device) OnDisconnect(fn func()) {
@@ -161,6 +166,23 @@ func (d *Device) OnDisconnect(fn func()) {
 	}
 }
 
+func (d *Device) OnUpdate(fn func(AttributeAndValue)) {
+	if d.onUpdate == nil {
+		d.onUpdate = fn
+	} else {
+		existing := d.onUpdate
+		d.onUpdate = func(a AttributeAndValue) {
+			existing(a)
+			fn(a)
+		}
+	}
+	if d.connected {
+		for _, a := range d.attributes {
+			fn(a)
+		}
+	}
+}
+
 func (d Device) Connected() bool {
 	return d.connected
 }
@@ -169,11 +191,15 @@ func (d *Device) Disconnect() error {
 	_, err := d.Exec(Packet{Command: "disconnect"})
 	return err
 }
+
 func (d *Device) Reconnect() error {
 	d.println("reconnect")
 	return d.Connect(d.DeviceInfo.ControlAddress.String())
 }
+
 func (d *Device) Connect(addr string) error {
+	addr = strings.Split(addr, ":")[0]
+
 	if d.connected {
 		return errors.New("already connected")
 	}
@@ -218,6 +244,41 @@ func (d *Device) Connect(addr string) error {
 			if d.onDisconnect != nil {
 				d.println("fire onDisconnect")
 				d.onDisconnect()
+			}
+		}()
+		go func() {
+			defer d.Disconnect()
+			if conn, err := net.DialTimeout("tcp", d.DeviceInfo.UpdateAddress.String(), IdleTimeout); err == nil {
+				scanr := bufio.NewScanner(conn)
+				for scanr.Scan() {
+					conn.SetDeadline(time.Now().Add(6 * time.Second))
+					raw := scanr.Text()
+					packet, err := Decode(raw)
+					if err != nil {
+						d.println("error: update decode", err)
+						return
+					}
+					d.lastRead = time.Now()
+					switch packet.Command {
+					case "attr":
+						d.println("update:", raw)
+						if a, ok := d.attributes[packet.Args["name"]]; ok {
+							if err = a.Accept(packet.Args["value"]); err != nil {
+								d.println("error: update parse int", packet.Args["value"], err)
+								return
+							} else if d.onUpdate != nil {
+								d.onUpdate(a)
+							}
+						} else {
+							d.println("error: update unknown attribute", packet.Args["name"])
+							return
+						}
+					}
+				}
+				if err := scanr.Err(); err != nil {
+					d.println("error: update scan", err)
+					return
+				}
 			}
 		}()
 	} else {
@@ -346,17 +407,27 @@ func (d *Device) list() error {
 			}
 			switch r.Args["type"] {
 			case "bool":
-				d.attributes[r.Args["name"]] = BooleanAttributeValue{
+				d.attributes[r.Args["name"]] = &BooleanAttributeValue{
 					Attribute: attr,
-					Value:     r.Args["value"] == "true",
 				}
 			case "string":
-				d.attributes[r.Args["name"]] = StringAttributeValue{
+				d.attributes[r.Args["name"]] = &StringAttributeValue{
 					Attribute: attr,
-					Value:     r.Args["value"],
+				}
+			case "integer":
+				d.attributes[r.Args["name"]] = &IntegerAttributeValue{
+					Attribute: attr,
+				}
+			case "double":
+				d.attributes[r.Args["name"]] = &DoubleAttributeValue{
+					Attribute: attr,
 				}
 			default:
 				return errors.New("unknown attribute type: " + r.Args["type"])
+			}
+			d.attributes[r.Args["name"]].Accept(r.Args["value"])
+			if d.onUpdate != nil {
+				d.onUpdate(d.attributes[r.Args["name"]])
 			}
 		} else if strings.HasPrefix(r.Command, "func") {
 			if r.Command == "func" {
