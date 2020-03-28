@@ -52,6 +52,11 @@ type DeviceInfo struct {
 	FrameworkVersion Version  `json:"framework_version"`
 	ControlAddress   net.Addr `json:"control_address"`
 	UpdateAddress    net.Addr `json:"update_address"`
+	ip               string
+}
+
+func (d DeviceInfo) IpAddr() string {
+	return d.ip
 }
 
 func (d DeviceInfo) String() string {
@@ -198,18 +203,18 @@ func (d *Device) Reconnect() error {
 }
 
 func (d *Device) Connect(addr string) error {
-	addr = strings.Split(addr, ":")[0]
+	d.ip = strings.Split(addr, ":")[0]
 
 	if d.connected {
 		return errors.New("already connected")
 	}
 	var err error
-	d.DeviceInfo.ControlAddress, err = net.ResolveTCPAddr("tcp", addr+":5000")
+	d.DeviceInfo.ControlAddress, err = net.ResolveTCPAddr("tcp", d.ip+":5000")
 	if err != nil {
 		return err
 	}
 
-	d.DeviceInfo.UpdateAddress, err = net.ResolveTCPAddr("tcp", addr+":5001")
+	d.DeviceInfo.UpdateAddress, err = net.ResolveTCPAddr("tcp", d.ip+":5001")
 	if err != nil {
 		return err
 	}
