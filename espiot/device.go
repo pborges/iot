@@ -251,7 +251,7 @@ func (d *Device) Connect(addr string) error {
 			if conn, err := net.DialTimeout("tcp", d.DeviceInfo.UpdateAddress.String(), IdleTimeout); err == nil {
 				scanr := bufio.NewScanner(conn)
 				for scanr.Scan() {
-					conn.SetDeadline(time.Now().Add(6 * time.Second))
+					conn.SetDeadline(time.Now().Add(PingTimeout))
 					raw := scanr.Text()
 					packet, err := Decode(raw)
 					if err != nil {
@@ -399,6 +399,7 @@ func (d *Device) SetBool(attr string, value bool) error {
 	}
 	return d.Set(attr, v)
 }
+
 func (d *Device) SetBoolOnDisconnect(attr string, value bool) error {
 	v := "false"
 	if value {
