@@ -263,7 +263,7 @@ func (d *Device) Connect(addr string) error {
 					case "attr":
 						d.println("update:", raw)
 						if a, ok := d.attributes[packet.Args["name"]]; ok {
-							if err = a.Accept(packet.Args["value"]); err != nil {
+							if err = a.accept(packet.Args["value"]); err != nil {
 								d.println("error: update parse int", packet.Args["value"], err)
 								return
 							} else if d.onUpdate != nil {
@@ -472,7 +472,7 @@ func (d *Device) list() error {
 			default:
 				return errors.New("unknown attribute type: " + r.Args["type"])
 			}
-			d.attributes[r.Args["name"]].Accept(r.Args["value"])
+			d.attributes[r.Args["name"]].accept(r.Args["value"])
 			if d.onUpdate != nil {
 				d.onUpdate(d.attributes[r.Args["name"]])
 			}
