@@ -362,6 +362,13 @@ func (d Device) String() string {
 	return d.DeviceInfo.String()
 }
 
+func (d *Device) Get(attr string) string {
+	if a, ok := d.attributes[attr]; ok {
+		return a.InspectValue()
+	}
+	return ""
+}
+
 func (d *Device) Set(attr string, value string) error {
 	_, err := d.Exec(Packet{
 		Command: "set",
@@ -369,6 +376,7 @@ func (d *Device) Set(attr string, value string) error {
 	})
 	return err
 }
+
 func (d *Device) SetOnDisconnect(attr string, value string) error {
 	_, err := d.Exec(Packet{
 		Command: "set",
@@ -376,6 +384,14 @@ func (d *Device) SetOnDisconnect(attr string, value string) error {
 	})
 	return err
 }
+
+func (d *Device) GetBool(attr string) bool {
+	if a, ok := d.attributes[attr]; ok {
+		return a.(*BooleanAttributeValue).Value
+	}
+	return false
+}
+
 func (d *Device) SetBool(attr string, value bool) error {
 	v := "false"
 	if value {
@@ -389,6 +405,36 @@ func (d *Device) SetBoolOnDisconnect(attr string, value bool) error {
 		v = "true"
 	}
 	return d.SetOnDisconnect(attr, v)
+}
+
+func (d *Device) GetInteger(attr string) int {
+	if a, ok := d.attributes[attr]; ok {
+		return a.(*IntegerAttributeValue).Value
+	}
+	return 0
+}
+
+func (d *Device) SetInteger(attr string, value int) error {
+	return d.Set(attr, strconv.Itoa(value))
+}
+
+func (d *Device) SetIntegerOnDisconnect(attr string, value int) error {
+	return d.SetOnDisconnect(attr, strconv.Itoa(value))
+}
+
+func (d *Device) GetDouble(attr string) float64 {
+	if a, ok := d.attributes[attr]; ok {
+		return a.(*DoubleAttributeValue).Value
+	}
+	return 0
+}
+
+func (d *Device) SetDouble(attr string, value float64) error {
+	return d.Set(attr, strconv.FormatFloat(value, 'E', 4, 64))
+}
+
+func (d *Device) SetDoubleOnDisconnect(attr string, value float64) error {
+	return d.SetOnDisconnect(attr, strconv.FormatFloat(value, 'E', 4, 64))
 }
 
 func (d *Device) list() error {
