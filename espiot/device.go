@@ -193,8 +193,12 @@ func (d Device) Connected() bool {
 }
 
 func (d *Device) Disconnect() error {
-	_, err := d.Exec(Packet{Command: "disconnect", Args: map[string]string{"err": "Manual Disconnect"}})
-	return err
+	return d.disconnect(errors.New("manual disconnect"))
+}
+
+func (d *Device) disconnect(err error) error {
+	_, e := d.Exec(Packet{Command: "disconnect", Args: map[string]string{"err": err.Error()}})
+	return e
 }
 
 func (d *Device) Reconnect() error {
@@ -229,8 +233,8 @@ func (d *Device) Connect(addr string) error {
 				select {
 				case p := <-d.control:
 					if p.Command == "disconnect" {
-						d.println("manual disconnect")
-						err = errors.New("disconnect")
+						err = fmt.Errorf("disconnect: %s", p.Args["err"])
+						d.println(err)
 						break
 					}
 					var res []Packet
@@ -254,8 +258,7 @@ func (d *Device) Connect(addr string) error {
 		go func() {
 			var disconnectErr error
 			defer func() {
-				d.println(disconnectErr)
-				_, _ = d.Exec(Packet{Command: "disconnect", Args: map[string]string{"err": "error in update conn: " + disconnectErr.Error()}})
+				_ = d.disconnect(disconnectErr)
 			}()
 			if conn, err := net.DialTimeout("tcp", d.DeviceInfo.UpdateAddress.String(), IdleTimeout); err == nil {
 				scanr := bufio.NewScanner(conn)
