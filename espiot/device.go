@@ -197,7 +197,11 @@ func (d *Device) Disconnect() error {
 }
 
 func (d *Device) disconnect(err error) error {
-	_, e := d.Exec(Packet{Command: "disconnect", Args: map[string]string{"err": err.Error()}})
+	args := map[string]string{"err": ""}
+	if err != nil {
+		args["err"] = err.Error()
+	}
+	_, e := d.Exec(Packet{Command: "disconnect", Args: args})
 	return e
 }
 
@@ -210,7 +214,8 @@ func (d *Device) Connect(addr string) error {
 	d.ip = strings.Split(addr, ":")[0]
 
 	if d.connected {
-		return errors.New("already connected")
+		// already connected, no problems
+		return nil
 	}
 	var err error
 	d.DeviceInfo.ControlAddress, err = net.ResolveTCPAddr("tcp", d.ip+":5000")
