@@ -193,7 +193,7 @@ func (d Device) Connected() bool {
 }
 
 func (d *Device) Disconnect() error {
-	_, err := d.Exec(Packet{Command: "disconnect"})
+	_, err := d.Exec(Packet{Command: "disconnect", Args: map[string]string{"err": "Manual Disconnect"}})
 	return err
 }
 
@@ -252,15 +252,19 @@ func (d *Device) Connect(addr string) error {
 			}
 		}()
 		go func() {
-			defer d.Disconnect()
+			var disconnectErr error
+			defer func() {
+				d.println(disconnectErr)
+				_, _ = d.Exec(Packet{Command: "disconnect", Args: map[string]string{"err": "error in update conn: " + disconnectErr.Error()}})
+			}()
 			if conn, err := net.DialTimeout("tcp", d.DeviceInfo.UpdateAddress.String(), IdleTimeout); err == nil {
 				scanr := bufio.NewScanner(conn)
 				for scanr.Scan() {
-					conn.SetDeadline(time.Now().Add(PingTimeout))
+					conn.SetDeadline(time.Now().Add(7 * time.Second))
 					raw := scanr.Text()
 					packet, err := Decode(raw)
 					if err != nil {
-						d.println("error: update decode", err)
+						disconnectErr = fmt.Errorf("error: update decode %w", err)
 						return
 					}
 					d.lastRead = time.Now()
@@ -269,19 +273,19 @@ func (d *Device) Connect(addr string) error {
 						d.println("update:", raw)
 						if a, ok := d.attributes[packet.Args["name"]]; ok {
 							if err = a.accept(packet.Args["value"]); err != nil {
-								d.println("error: update parse int", packet.Args["value"], err)
+								disconnectErr = fmt.Errorf("error: update parse int %s %w", packet.Args["value"], err)
 								return
 							} else if d.onUpdate != nil {
 								d.onUpdate(a)
 							}
 						} else {
-							d.println("error: update unknown attribute", packet.Args["name"])
+							disconnectErr = errors.New("error: update unknown attribute " + packet.Args["name"])
 							return
 						}
 					}
 				}
 				if err := scanr.Err(); err != nil {
-					d.println("error: update scan", err)
+					disconnectErr = fmt.Errorf("error: update scan %w", err)
 					return
 				}
 			}
