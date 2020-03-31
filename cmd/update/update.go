@@ -19,15 +19,15 @@ func main() {
 
 	scanner := bufio.NewScanner(os.Stdin)
 	for _, dev := range discovered {
-		log.Println("Discovered", dev.ControlAddress.String(), dev.String())
+		log.Println("Discovered", dev.Address, dev.Id())
 		usr, _ := user.Current()
-		dir := usr.HomeDir + "/src/iot/espiot_" + dev.Model
+		dir := usr.HomeDir + "/src/iot/espiot_" + dev.Model()
 		if _, err := os.Stat(dir); !os.IsNotExist(err) {
 			log.Println("Found firmware directory", dir)
 			log.Println("Do update? [y/n]")
 			if scanner.Scan() && scanner.Text() == "y" {
 				log.Println("Updating...")
-				updateCmd := exec.Command("pio", "run", "-t", "upload", "--upload-port", dev.IpAddr())
+				updateCmd := exec.Command("pio", "run", "-t", "upload", "--upload-port", dev.Address)
 				updateCmd.Dir = dir
 				updateCmd.Stdout = os.Stdout
 				if err := updateCmd.Run(); err != nil {
