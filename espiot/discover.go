@@ -55,11 +55,19 @@ func validateDevice(addr string) (*Device, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	if err = conn.SetWriteDeadline(time.Now().Add(1 * time.Second)); err != nil {
+		return nil, err
+	}
+
 	if _, err := fmt.Fprintln(conn, Encode(Packet{Command: "info"})); err != nil {
 		return nil, err
 	}
 	scanner := bufio.NewScanner(conn)
 
+	if err = conn.SetReadDeadline(time.Now().Add(1 * time.Second)); err != nil {
+		return nil, err
+	}
 	if res, err := readResponse(scanner); err == nil {
 		if err := dev.setMetadata(res[0]); err != nil {
 			return nil, err
@@ -72,6 +80,9 @@ func validateDevice(addr string) (*Device, error) {
 		return nil, err
 	}
 
+	if err = conn.SetReadDeadline(time.Now().Add(1 * time.Second)); err != nil {
+		return nil, err
+	}
 	if res, err := readResponse(scanner); err == nil {
 		if err := dev.handleList(res); err != nil {
 			return nil, err
@@ -85,6 +96,7 @@ func validateDevice(addr string) (*Device, error) {
 
 func readResponse(scanner *bufio.Scanner) ([]Packet, error) {
 	var listPackets []Packet
+
 	for scanner.Scan() {
 		if scanner.Text() != "ok" {
 			if p, err := Decode(scanner.Text()); err == nil {
