@@ -17,3 +17,6 @@
 # Goland IDE
 .idea/
 *.iml
+
+example/
+kyle/
