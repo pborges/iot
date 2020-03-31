@@ -4,85 +4,53 @@ import (
 	"fmt"
 	"github.com/pborges/iot/espiot"
 	"github.com/robfig/cron/v3"
-	logger "log"
+	"log"
 	"os"
 	"strings"
 	"time"
 )
 
-func StaticDiscovery(ip ...string) (res []*espiot.Device, err error) {
-	for _, addr := range ip {
-		dev := &espiot.Device{}
-		if err := dev.Connect(addr); err != nil {
-			return nil, err
-		}
-		res = append(res, dev)
-	}
-	return res, nil
-}
-
 func main() {
-	log := logger.New(os.Stdout, "", logger.LstdFlags)
+	crontab := cron.New(
+		cron.WithSeconds(),
+	)
 
 	discovered, err := espiot.Discover("192.168.1.0/24")
 	if err != nil {
 		log.Println(err)
 	}
 
-	devs := make(map[string]*espiot.Device)
+	devices := make(map[string]*espiot.Device)
 	for _, dev := range discovered {
-		log.Println("Discovered", dev.String(), dev.ControlAddress.String())
-		dev.Log = logger.New(os.Stdout, fmt.Sprintf("[%s] ", dev.String()), logger.LstdFlags|logger.Lshortfile)
-		if !strings.HasPrefix(dev.Model, "s31") {
-			continue
+		log.Printf("Discovered addr:'%s' id:'%s' fw:'%s' hw:'%s' model:'%s' name:'%s'\n", dev.Address, dev.Id(), dev.FrameworkVersion(), dev.HardwareVersion(), dev.Model(), dev.GetString("config.name"))
+		dev.AlwaysReconnect = true
+		name := dev.Id()
+		if dev.GetString("config.name") != "" {
+			name = dev.GetString("config.name")
 		}
-		if dev.Name != "" {
-			devs[dev.Name] = dev
-		} else {
-			devs[dev.Id] = dev
-		}
-	}
+		dev.Log = log.New(os.Stdout, fmt.Sprintf("[%s]", name), log.LstdFlags)
 
-	for _, dev := range devs {
-		dev.OnUpdate(func(v espiot.AttributeAndValue) {
-			dev.Log.Println(v.AttributeDef().Name, v.InspectValue())
-		})
 		dev.OnConnect(func() {
-			if err := dev.SetBool("gpio.0", true); err != nil {
-				dev.Log.Println("error setting OnConnect:", err)
-			}
-			if err := dev.SetBoolOnDisconnect("gpio.0", false); err != nil {
-				dev.Log.Println("error setting OnDisconnect:", err)
-			}
+			dev.SetBoolOnDisconnect("gpio.0", false)
+			dev.SetBool("gpio.0", true)
 		})
 
-		dev.OnDisconnect(func() {
-			for {
-				time.Sleep(5 * time.Second)
-				if err := dev.Reconnect(); err != nil {
-					dev.Log.Println("error reconnecting", err)
-				} else {
-					return
-				}
-			}
-		})
+		if strings.HasPrefix(dev.Model(), "s31") {
+			devices[name] = dev
+		}
 	}
 
-	c := cron.New(
-		cron.WithSeconds(),
-		cron.WithLogger(cron.VerbosePrintfLogger(log)),
-	)
-	c.AddFunc("@every "+(1*time.Second).String(), func() {
-		for _, dev := range devs {
-			go func(dev *espiot.Device) {
-				if err := dev.SetBool("led.0", !dev.GetBool("led.0")); err != nil {
-					dev.Log.Println("error setting state:", err)
-				}
-			}(dev)
+	for k := range devices {
+		devices[k].Connect()
+		if _, err := crontab.AddFunc("@every "+(1*time.Second).String(), func() {
+			if err := devices[k].SetBool("led.0", !devices[k].GetBool("led.0")); err != nil {
+				fmt.Println(err)
+			}
+		}); err != nil {
+			fmt.Println("error in cron", err)
 		}
-	})
+	}
 
-	c.Start()
-
+	crontab.Start()
 	select {}
 }

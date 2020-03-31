@@ -9,6 +9,7 @@ import (
 type AttributeAndValue interface {
 	AttributeDef() Attribute
 	InspectValue() string
+	Interface() interface{}
 	accept(string) error
 }
 
@@ -37,6 +38,10 @@ func (a StringAttributeValue) InspectValue() string {
 	return a.Value
 }
 
+func (a StringAttributeValue) Interface() interface{} {
+	return a.Value
+}
+
 type BooleanAttributeValue struct {
 	Attribute
 	Value bool
@@ -50,6 +55,10 @@ func (a *BooleanAttributeValue) accept(s string) (err error) {
 	a.Attribute.UpdatedAt = time.Now()
 	a.Value, err = strconv.ParseBool(s)
 	return
+}
+
+func (a BooleanAttributeValue) Interface() interface{} {
+	return a.Value
 }
 
 type IntegerAttributeValue struct {
@@ -67,6 +76,10 @@ func (a IntegerAttributeValue) InspectValue() string {
 	return fmt.Sprintf("%d", a.Value)
 }
 
+func (a IntegerAttributeValue) Interface() interface{} {
+	return a.Value
+}
+
 type DoubleAttributeValue struct {
 	Attribute
 	Value float64
@@ -80,4 +93,8 @@ func (a *DoubleAttributeValue) accept(s string) (err error) {
 
 func (a DoubleAttributeValue) InspectValue() string {
 	return fmt.Sprintf("%f", a.Value)
+}
+
+func (a DoubleAttributeValue) Interface() interface{} {
+	return a.Value
 }

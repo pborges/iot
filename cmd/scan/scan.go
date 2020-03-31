@@ -15,6 +15,6 @@ func main() {
 	}
 
 	for _, dev := range discovered {
-		log.Println("Discovered", dev.ControlAddress.String(), dev.String())
+		log.Printf("Discovered addr:'%s' id:'%s' fw:'%s' hw:'%s' model:'%s' name:'%s'\n", dev.Address, dev.Id(), dev.FrameworkVersion(), dev.HardwareVersion(), dev.Model(), dev.GetString("config.name"))
 	}
 }

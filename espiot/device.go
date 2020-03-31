@@ -4,16 +4,15 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net"
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
-
-const IdleTimeout = 3 * time.Second
-const PingTimeout = 5 * time.Second
 
 type Version struct {
 	Major int `json:"major"`
@@ -43,105 +42,223 @@ func parseVersion(v string) (Version, error) {
 	return ver, nil
 }
 
-type DeviceInfo struct {
-	Id               string   `json:"id"`
-	Name             string   `json:"name"`
-	Manufacturer     string   `json:"manufacturer"`
-	Model            string   `json:"model"`
-	HardwareVersion  Version  `json:"hardware_version"`
-	FrameworkVersion Version  `json:"framework_version"`
-	ControlAddress   net.Addr `json:"control_address"`
-	UpdateAddress    net.Addr `json:"update_address"`
-	ip               string
-}
-
-func (d DeviceInfo) IpAddr() string {
-	return d.ip
-}
-
-func (d DeviceInfo) String() string {
-	return fmt.Sprintf("id:%s model:%s hw:%s ver:%s name: %s",
-		d.Id,
-		d.Model,
-		d.HardwareVersion,
-		d.FrameworkVersion,
-		d.Name,
-	)
-}
-
 type Packet struct {
-	Command  string
-	Args     map[string]string
-	response struct {
-		Packets chan []Packet
-		Error   chan error
-	}
+	Command string
+	Args    map[string]string
 }
 
 type Device struct {
-	DeviceInfo
-	Log *log.Logger
+	AlwaysReconnect bool
+	Address         string
+	Log             *log.Logger
+	VerboseLogging  bool
+
+	metadata struct {
+		id    string
+		model string
+		hw    Version
+		ver   Version
+	}
 
 	attributes map[string]AttributeAndValue
 	functions  map[string]Function
 
-	lastWrite time.Time
-	lastRead  time.Time
-	connected bool
-
-	control      chan Packet
+	connected    bool
+	execute      chan request
+	wg           sync.WaitGroup
 	onConnect    func()
 	onDisconnect func()
 	onUpdate     func(AttributeAndValue)
+	control      net.Conn
+	update       net.Conn
 }
 
-func (d *Device) writeCommandAndReadResponse(conn net.Conn, p Packet) ([]Packet, error) {
-	line := Encode(p)
+type request struct {
+	Packet
+	Response chan []Packet
+	Error    chan error
+}
 
-	if line != "ping" {
-		d.println("write:", line)
+func (d Device) Id() string {
+	return d.metadata.id
+}
+
+func (d Device) HardwareVersion() Version {
+	return d.metadata.ver
+}
+
+func (d Device) FrameworkVersion() Version {
+	return d.metadata.ver
+}
+
+func (d Device) Model() string {
+	return d.metadata.model
+}
+
+func (d *Device) Set(attr string, value interface{}) error {
+	return d.set(attr, value, false)
+}
+
+func (d *Device) SetOnDisconnect(attr string, value interface{}) error {
+	return d.set(attr, value, true)
+}
+
+func (d *Device) SetString(attr string, value string) error {
+	return d.Set(attr, value)
+}
+
+func (d *Device) SetStringOnDisconnect(attr string, value string) error {
+	return d.SetOnDisconnect(attr, value)
+}
+
+func (d *Device) SetBool(attr string, value bool) error {
+	v := "false"
+	if value {
+		v = "true"
 	}
+	return d.Set(attr, v)
+}
 
-	conn.SetDeadline(time.Now().Add(IdleTimeout))
-	if _, err := fmt.Fprintln(conn, line); err != nil {
+func (d *Device) SetBoolOnDisconnect(attr string, value bool) error {
+	v := "false"
+	if value {
+		v = "true"
+	}
+	return d.SetOnDisconnect(attr, v)
+}
+
+func (d *Device) SetInteger(attr string, value int) error {
+	return d.Set(attr, strconv.Itoa(value))
+}
+
+func (d *Device) SetIntegerOnDisconnect(attr string, value int) error {
+	return d.SetOnDisconnect(attr, strconv.Itoa(value))
+}
+
+func (d *Device) SetDouble(attr string, value float64) error {
+	return d.Set(attr, strconv.FormatFloat(value, 'E', 4, 64))
+}
+
+func (d *Device) SetDoubleOnDisconnect(attr string, value float64) error {
+	return d.SetOnDisconnect(attr, strconv.FormatFloat(value, 'E', 4, 64))
+}
+
+func (d *Device) Get(attr string) interface{} {
+	if a, ok := d.attributes[attr]; ok {
+		return a.Interface()
+	}
+	return nil
+}
+func (d *Device) GetString(attr string) string {
+	if a, ok := d.attributes[attr]; ok {
+		return a.(*StringAttributeValue).Value
+	}
+	return ""
+}
+func (d *Device) GetBool(attr string) bool {
+	if a, ok := d.attributes[attr]; ok {
+		return a.(*BooleanAttributeValue).Value
+	}
+	return false
+}
+
+func (d *Device) GetInteger(attr string) int {
+	if a, ok := d.attributes[attr]; ok {
+		return a.(*IntegerAttributeValue).Value
+	}
+	return 0
+}
+func (d *Device) GetDouble(attr string) float64 {
+	if a, ok := d.attributes[attr]; ok {
+		return a.(*DoubleAttributeValue).Value
+	}
+	return 0
+}
+
+func (d *Device) Exec(req Packet) ([]Packet, error) {
+	if !d.connected {
+		return nil, errors.New("not connected")
+	}
+	request := request{
+		Packet:   req,
+		Response: make(chan []Packet),
+		Error:    make(chan error),
+	}
+	if req.Command != "ping" {
+		d.log(false).Println("exec:", Encode(req))
+	} else {
+		d.log(true).Println("exec:", Encode(req))
+	}
+	select {
+	case d.execute <- request:
+	case <-time.After(1 * time.Second):
+		return nil, errors.New("unavailable")
+	}
+	select {
+	case res := <-request.Response:
+		return res, nil
+	case err := <-request.Error:
 		return nil, err
 	}
+}
 
-	scanr := bufio.NewScanner(conn)
-	var res []Packet
-	for scanr.Scan() {
-		raw := scanr.Text()
-		if line != "ping" {
-			d.println("read:", raw)
-		}
-		if strings.HasPrefix(raw, "ok") {
+func (d *Device) Connect() error {
+	if d.Address == "" {
+		return errors.New("address cannot be nil")
+	}
+	if d.connected {
+		return errors.New("already connected")
+	}
+	d.wg.Wait()
+	for {
+		if err := d.dial(); err == nil {
 			break
+		} else if d.AlwaysReconnect {
+			d.log(true).Println("attempt dial error:", err)
 		} else {
-			packet, err := Decode(raw)
-			if err != nil {
-				return nil, err
-			}
-			res = append(res, packet)
+			return err
 		}
 	}
-	if err := scanr.Err(); err != nil {
-		d.println("err:", err)
-		return nil, err
+
+	d.wg.Add(1)
+	go d.handleUpdates()
+
+	d.wg.Add(1)
+	d.execute = make(chan request)
+	go d.handleControl()
+
+	d.connected = true
+	if err := d.init(); err != nil {
+		return err
 	}
-	d.lastWrite = time.Now()
-	return res, nil
+
+	if d.onConnect != nil {
+		d.log(false).Println("connect")
+		d.onConnect()
+	}
+	go func() {
+		d.wg.Wait()
+		d.connected = false
+		if d.onDisconnect != nil {
+			d.log(false).Println("disconnect")
+			d.onDisconnect()
+		}
+		if d.AlwaysReconnect {
+			d.log(false).Println("reconnecting...")
+			if err := d.Connect(); err != nil {
+				d.log(true).Println("reconnect failed", err)
+			}
+		}
+	}()
+	return nil
 }
 
-func (d *Device) println(v ...interface{}) {
-	if d.Log != nil {
-		d.Log.Println(v)
-	}
-}
-
-func (d *Device) printf(format string, v ...interface{}) {
-	if d.Log != nil {
-		d.Log.Printf(format, v)
-	}
+func (d *Device) Disconnect() {
+	alwaysReconnect := d.AlwaysReconnect
+	d.AlwaysReconnect = false
+	d.disconnect()
+	d.wg.Wait()
+	d.AlwaysReconnect = alwaysReconnect
 }
 
 func (d *Device) OnConnect(fn func()) {
@@ -188,280 +305,47 @@ func (d *Device) OnUpdate(fn func(AttributeAndValue)) {
 	}
 }
 
-func (d Device) Connected() bool {
-	return d.connected
-}
-
-func (d *Device) Disconnect() error {
-	return d.disconnect(errors.New("manual disconnect"))
-}
-
-func (d *Device) disconnect(err error) error {
-	args := map[string]string{"err": ""}
-	if err != nil {
-		args["err"] = err.Error()
+func (d *Device) ListAttributes() []AttributeAndValue {
+	attrs := make([]AttributeAndValue, 0, len(d.attributes))
+	for _, v := range d.attributes {
+		attrs = append(attrs, v)
 	}
-	_, e := d.Exec(Packet{Command: "disconnect", Args: args})
-	return e
+	return attrs
 }
 
-func (d *Device) Reconnect() error {
-	d.println("reconnect")
-	return d.Connect(d.DeviceInfo.ControlAddress.String())
-}
-
-func (d *Device) Connect(addr string) error {
-	d.ip = strings.Split(addr, ":")[0]
-
-	if d.connected {
-		// already connected, no problems
-		return nil
+func (d *Device) ListFunctions() []Function {
+	fns := make([]Function, 0, len(d.functions))
+	for _, v := range d.functions {
+		fns = append(fns, v)
 	}
-	var err error
-	d.DeviceInfo.ControlAddress, err = net.ResolveTCPAddr("tcp", d.ip+":5000")
+	return fns
+}
+
+func (d *Device) init() error {
+	res, err := d.Exec(Packet{Command: "info"})
 	if err != nil {
 		return err
 	}
 
-	d.DeviceInfo.UpdateAddress, err = net.ResolveTCPAddr("tcp", d.ip+":5001")
+	if err := d.setMetadata(res[0]); err != nil {
+		return err
+	}
+
+	res, err = d.Exec(Packet{Command: "list"})
 	if err != nil {
 		return err
 	}
 
-	d.println("dialing", d.DeviceInfo.ControlAddress.String())
-	if conn, err := net.DialTimeout("tcp", d.DeviceInfo.ControlAddress.String(), IdleTimeout); err == nil {
-		d.control = make(chan Packet)
-		d.connected = true
-		go func() {
-			var err error
-			for err == nil {
-				select {
-				case p := <-d.control:
-					if p.Command == "disconnect" {
-						err = fmt.Errorf("disconnect: %s", p.Args["err"])
-						d.println(err)
-						break
-					}
-					var res []Packet
-					if res, err = d.writeCommandAndReadResponse(conn, p); err == nil {
-						p.response.Packets <- res
-					} else {
-						p.response.Error <- err
-					}
-				case <-time.After(PingTimeout):
-					//fmt.Println("ping")
-					_, err = d.writeCommandAndReadResponse(conn, Packet{Command: "ping"})
-				}
-			}
-			//fmt.Println("OnDisconnect", err)
-			d.connected = false
-			if d.onDisconnect != nil {
-				d.println("fire onDisconnect")
-				d.onDisconnect()
-			}
-		}()
-		go func() {
-			var disconnectErr error
-			defer func() {
-				_ = d.disconnect(disconnectErr)
-			}()
-			if conn, err := net.DialTimeout("tcp", d.DeviceInfo.UpdateAddress.String(), IdleTimeout); err == nil {
-				scanr := bufio.NewScanner(conn)
-				for scanr.Scan() {
-					conn.SetDeadline(time.Now().Add(7 * time.Second))
-					raw := scanr.Text()
-					packet, err := Decode(raw)
-					if err != nil {
-						disconnectErr = fmt.Errorf("error: update decode %w", err)
-						return
-					}
-					d.lastRead = time.Now()
-					switch packet.Command {
-					case "attr":
-						d.println("update:", raw)
-						if a, ok := d.attributes[packet.Args["name"]]; ok {
-							if err = a.accept(packet.Args["value"]); err != nil {
-								disconnectErr = fmt.Errorf("error: update parse int %s %w", packet.Args["value"], err)
-								return
-							} else if d.onUpdate != nil {
-								d.onUpdate(a)
-							}
-						} else {
-							disconnectErr = errors.New("error: update unknown attribute " + packet.Args["name"])
-							return
-						}
-					}
-				}
-				if err := scanr.Err(); err != nil {
-					disconnectErr = fmt.Errorf("error: update scan %w", err)
-					return
-				}
-			}
-		}()
-	} else {
-		//fmt.Println("OnDisconnectDial", err)
-		d.connected = false
-		if d.onDisconnect != nil {
-			d.println("fire onDisconnect from failed dial")
-			d.onDisconnect()
-		}
-		return err
+	return d.handleList(res)
+}
+
+func (d *Device) handleList(res []Packet) (err error) {
+	if d.attributes == nil {
+		d.attributes = make(map[string]AttributeAndValue)
 	}
-
-	if res, err := d.Exec(Packet{Command: "info"}); err == nil {
-		if len(res) != 1 {
-			return errors.New("unexpected response in info packet")
-		}
-		if id, ok := res[0].Args["id"]; ok {
-			d.DeviceInfo.Id = id
-		} else {
-			return errors.New("no id in info packet")
-		}
-		if ver, ok := res[0].Args["ver"]; ok {
-			d.DeviceInfo.FrameworkVersion, err = parseVersion(ver)
-			if err != nil {
-				return err
-			}
-		} else {
-			return errors.New("no ver in info packet")
-		}
-		if hw, ok := res[0].Args["hw"]; ok {
-			d.DeviceInfo.HardwareVersion, err = parseVersion(hw)
-			if err != nil {
-				return err
-			}
-		} else {
-			return errors.New("no hw in info packet")
-		}
-		if m, ok := res[0].Args["model"]; ok {
-			d.DeviceInfo.Model = m
-		} else {
-			return errors.New("no model in info packet")
-		}
-	} else {
-		return err
+	if d.functions == nil {
+		d.functions = make(map[string]Function)
 	}
-
-	if err := d.list(); err != nil {
-		return err
-	}
-
-	//fmt.Println("OnConnect")
-	if d.onConnect != nil {
-		d.println("fire onConnect")
-		d.onConnect()
-	}
-
-	return nil
-}
-
-func (d *Device) Exec(cmd Packet) ([]Packet, error) {
-	if !d.connected {
-		return nil, errors.New("not connected")
-	}
-
-	cmd.response.Packets = make(chan []Packet)
-	cmd.response.Error = make(chan error)
-
-	d.control <- cmd
-
-	select {
-	case res := <-cmd.response.Packets:
-		return res, nil
-	case err := <-cmd.response.Error:
-		return nil, err
-	case <-time.After(IdleTimeout):
-		return nil, errors.New("timeout waiting for exec response")
-	}
-}
-
-func (d Device) String() string {
-	return d.DeviceInfo.String()
-}
-
-func (d *Device) Get(attr string) string {
-	if a, ok := d.attributes[attr]; ok {
-		return a.InspectValue()
-	}
-	return ""
-}
-
-func (d *Device) Set(attr string, value string) error {
-	_, err := d.Exec(Packet{
-		Command: "set",
-		Args:    map[string]string{"name": attr, "value": value},
-	})
-	return err
-}
-
-func (d *Device) SetOnDisconnect(attr string, value string) error {
-	_, err := d.Exec(Packet{
-		Command: "set",
-		Args:    map[string]string{"name": attr, "value": value, "disconnect": "true"},
-	})
-	return err
-}
-
-func (d *Device) GetBool(attr string) bool {
-	if a, ok := d.attributes[attr]; ok {
-		return a.(*BooleanAttributeValue).Value
-	}
-	return false
-}
-
-func (d *Device) SetBool(attr string, value bool) error {
-	v := "false"
-	if value {
-		v = "true"
-	}
-	return d.Set(attr, v)
-}
-
-func (d *Device) SetBoolOnDisconnect(attr string, value bool) error {
-	v := "false"
-	if value {
-		v = "true"
-	}
-	return d.SetOnDisconnect(attr, v)
-}
-
-func (d *Device) GetInteger(attr string) int {
-	if a, ok := d.attributes[attr]; ok {
-		return a.(*IntegerAttributeValue).Value
-	}
-	return 0
-}
-
-func (d *Device) SetInteger(attr string, value int) error {
-	return d.Set(attr, strconv.Itoa(value))
-}
-
-func (d *Device) SetIntegerOnDisconnect(attr string, value int) error {
-	return d.SetOnDisconnect(attr, strconv.Itoa(value))
-}
-
-func (d *Device) GetDouble(attr string) float64 {
-	if a, ok := d.attributes[attr]; ok {
-		return a.(*DoubleAttributeValue).Value
-	}
-	return 0
-}
-
-func (d *Device) SetDouble(attr string, value float64) error {
-	return d.Set(attr, strconv.FormatFloat(value, 'E', 4, 64))
-}
-
-func (d *Device) SetDoubleOnDisconnect(attr string, value float64) error {
-	return d.SetOnDisconnect(attr, strconv.FormatFloat(value, 'E', 4, 64))
-}
-
-func (d *Device) list() error {
-	res, err := d.Exec(Packet{Command: "list"})
-	if err != nil {
-		return err
-	}
-	d.attributes = make(map[string]AttributeAndValue)
-	d.functions = make(map[string]Function)
 	for _, r := range res {
 		if r.Command == "attr" {
 			attr := Attribute{
@@ -489,10 +373,13 @@ func (d *Device) list() error {
 			default:
 				return errors.New("unknown attribute type: " + r.Args["type"])
 			}
-			d.attributes[r.Args["name"]].accept(r.Args["value"])
+			if err := d.attributes[r.Args["name"]].accept(r.Args["value"]); err != nil {
+				return err
+			}
 			if d.onUpdate != nil {
 				d.onUpdate(d.attributes[r.Args["name"]])
 			}
+
 		} else if strings.HasPrefix(r.Command, "func") {
 			if r.Command == "func" {
 				d.functions[r.Args["name"]] = Function{
@@ -509,22 +396,227 @@ func (d *Device) list() error {
 			}
 		}
 	}
-	d.DeviceInfo.Name = d.attributes["config.name"].InspectValue()
 	return nil
 }
 
-func (d *Device) ListAttributes() []AttributeAndValue {
-	attrs := make([]AttributeAndValue, 0, len(d.attributes))
-	for _, v := range d.attributes {
-		attrs = append(attrs, v)
+func (d *Device) setMetadata(p Packet) (err error) {
+	if p.Command != "info" {
+		err = errors.New("invalid packet")
+		return
 	}
-	return attrs
+
+	if v, ok := p.Args["id"]; ok && v != "" {
+		d.metadata.id = v
+	} else {
+		err = errors.New("id missing from info packet")
+		return
+	}
+
+	if v, ok := p.Args["model"]; ok && v != "" {
+		d.metadata.model = v
+	} else {
+		err = errors.New("model missing from info packet")
+		return
+	}
+
+	if v, ok := p.Args["hw"]; ok && v != "" {
+		d.metadata.hw, err = parseVersion(v)
+		if err != nil {
+			return
+		}
+	} else {
+		err = errors.New("hardware version missing from info packet")
+		return
+	}
+
+	if v, ok := p.Args["ver"]; ok && v != "" {
+		d.metadata.ver, err = parseVersion(v)
+		if err != nil {
+			return
+		}
+	} else {
+		err = errors.New("framework version missing from info packet")
+		return
+	}
+
+	return
 }
 
-func (d *Device) ListFunctions() []Function {
-	fns := make([]Function, 0, len(d.functions))
-	for _, v := range d.functions {
-		fns = append(fns, v)
+func (d *Device) set(attr string, value interface{}, disconnect bool) error {
+	if _, ok := d.attributes[attr]; !ok {
+		return errors.New("unknown attribute")
 	}
-	return fns
+
+	req := Packet{
+		Command: "set",
+		Args:    make(map[string]string),
+	}
+	if disconnect {
+		req.Args["disconnect"] = "true"
+	}
+	req.Args["name"] = attr
+	switch value.(type) {
+	case int, int8, int16, int32, int64:
+		req.Args["value"] = fmt.Sprintf("%d", value)
+	case float32, float64:
+		req.Args["value"] = fmt.Sprintf("%f", value)
+	case bool:
+		req.Args["value"] = fmt.Sprintf("%t", value)
+	case string:
+		req.Args["value"] = value.(string)
+	default:
+		return errors.New("unknown data type")
+	}
+	_, err := d.Exec(req)
+	return err
+}
+
+func (d Device) log(verbose bool) *log.Logger {
+	if d.Log == nil || verbose && !d.VerboseLogging {
+		return log.New(ioutil.Discard, "", 0)
+	}
+	return d.Log
+}
+
+func (d *Device) exec(conn net.Conn, scanner *bufio.Scanner, req request) {
+	writeTimeout := 1 * time.Second
+	readTimeout := 1 * time.Second
+
+	if err := conn.SetWriteDeadline(time.Now().Add(writeTimeout)); err != nil {
+		req.Error <- fmt.Errorf("set write deadline: %w", err)
+		return
+	}
+	if _, err := fmt.Fprintln(conn, Encode(req.Packet)); err != nil {
+		req.Error <- fmt.Errorf("encode: %w", err)
+		return
+	}
+
+	if err := conn.SetReadDeadline(time.Now().Add(readTimeout)); err != nil {
+		req.Error <- fmt.Errorf("set read deadline: %w", err)
+		return
+	}
+	var res []Packet
+	for scanner.Scan() {
+		cmd, err := Decode(scanner.Text())
+		if err != nil {
+			req.Error <- fmt.Errorf("decode: %w", err)
+			return
+		}
+		if cmd.Command != "ok" {
+			res = append(res, cmd)
+		} else {
+			req.Response <- res
+			return
+		}
+		if err := conn.SetReadDeadline(time.Now().Add(readTimeout)); err != nil {
+			req.Error <- fmt.Errorf("set read deadline: %w", err)
+			return
+		}
+	}
+	req.Error <- scanner.Err()
+}
+
+func (d *Device) handleControl() {
+	d.log(true).Println("[control   ] open")
+	var err error
+	defer func() {
+		d.log(true).Printf("[control   ] close error: %s\n", err)
+		d.wg.Done()
+		d.disconnect()
+	}()
+
+	scanner := bufio.NewScanner(d.control)
+	for {
+		select {
+		case req := <-d.execute:
+			d.log(true).Println("[control   ] write", Encode(req.Packet))
+			d.exec(d.control, scanner, req)
+		case <-time.After(5 * time.Second):
+			req := request{
+				Packet:   Packet{Command: "ping"},
+				Response: make(chan []Packet, 1),
+				Error:    make(chan error, 1),
+			}
+			d.log(true).Println("[control   ] ping")
+			d.exec(d.control, scanner, req)
+			select {
+			case <-req.Response:
+			case err = <-req.Error:
+				return
+			}
+		}
+	}
+}
+
+func (d *Device) handleUpdates() {
+	readTimeout := 6 * time.Second
+	d.log(true).Println("[update    ] open")
+	var err error
+	defer func() {
+		d.log(true).Printf("[update    ] close error: %s\n", err)
+		d.wg.Done()
+		d.disconnect()
+	}()
+
+	scanner := bufio.NewScanner(d.update)
+	if err = d.update.SetReadDeadline(time.Now().Add(readTimeout)); err != nil {
+		return
+	}
+	for scanner.Scan() {
+		d.log(true).Printf("[update    ] read: %s\n", scanner.Text())
+		var packet Packet
+		packet, err = Decode(scanner.Text())
+		if err != nil {
+			return
+		}
+
+		if packet.Command != "ping" {
+			d.log(false).Println("update:", Encode(packet))
+		} else {
+			d.log(true).Println("update:", Encode(packet))
+		}
+
+		switch packet.Command {
+		case "attr":
+			if a, ok := d.attributes[packet.Args["name"]]; ok {
+				if err = a.accept(packet.Args["value"]); err != nil {
+					err = fmt.Errorf("error: update parse int %s %w", packet.Args["value"], err)
+					return
+				} else if d.onUpdate != nil {
+					d.onUpdate(a)
+				}
+			} else {
+				err = errors.New("error: update unknown attribute " + packet.Args["name"])
+				return
+			}
+		}
+
+		if err = d.update.SetReadDeadline(time.Now().Add(readTimeout)); err != nil {
+			return
+		}
+	}
+	err = scanner.Err()
+}
+
+func (d *Device) dial() (err error) {
+	d.control, err = net.DialTimeout("tcp", d.Address+":5000", 3*time.Second)
+	if err != nil {
+		return fmt.Errorf("unable to dial control %w", err)
+	}
+
+	d.update, err = net.DialTimeout("tcp", d.Address+":5001", 3*time.Second)
+	if err != nil {
+		d.disconnect()
+		return fmt.Errorf("unable to dial update %w", err)
+	}
+	return nil
+}
+
+func (d *Device) disconnect() {
+	if d.control != nil {
+		d.control.Close()
+	}
+	if d.update != nil {
+		d.update.Close()
+	}
 }
