@@ -198,6 +198,11 @@ func (d *Device) Exec(req Packet) ([]Packet, error) {
 	case res := <-request.Response:
 		return res, nil
 	case err := <-request.Error:
+		if req.Command != "ping" {
+			d.log(false).Println("error exec:", Encode(req), "error:", err)
+		} else {
+			d.log(true).Println("error exec:", Encode(req), "error:", err)
+		}
 		return nil, err
 	}
 }
@@ -478,42 +483,48 @@ func (d Device) log(verbose bool) *log.Logger {
 	return d.Log
 }
 
-func (d *Device) exec(conn net.Conn, scanner *bufio.Scanner, req request) {
+func (d *Device) exec(conn net.Conn, scanner *bufio.Scanner, req request) error {
 	writeTimeout := 1 * time.Second
 	readTimeout := 1 * time.Second
 
 	if err := conn.SetWriteDeadline(time.Now().Add(writeTimeout)); err != nil {
-		req.Error <- fmt.Errorf("set write deadline: %w", err)
-		return
+		err = fmt.Errorf("set write deadline: %w", err)
+		req.Error <- err
+		return err
 	}
 	if _, err := fmt.Fprintln(conn, Encode(req.Packet)); err != nil {
-		req.Error <- fmt.Errorf("encode: %w", err)
-		return
+		err = fmt.Errorf("encode: %w", err)
+		req.Error <- err
+		return err
 	}
 
 	if err := conn.SetReadDeadline(time.Now().Add(readTimeout)); err != nil {
-		req.Error <- fmt.Errorf("set read deadline: %w", err)
-		return
+		err = fmt.Errorf("set read deadline: %w", err)
+		req.Error <- err
+		return err
 	}
 	var res []Packet
 	for scanner.Scan() {
 		cmd, err := Decode(scanner.Text())
 		if err != nil {
-			req.Error <- fmt.Errorf("decode: %w", err)
-			return
+			err = fmt.Errorf("decode: %w", err)
+			req.Error <- err
+			return err
 		}
 		if cmd.Command != "ok" {
 			res = append(res, cmd)
 		} else {
 			req.Response <- res
-			return
+			return nil
 		}
 		if err := conn.SetReadDeadline(time.Now().Add(readTimeout)); err != nil {
-			req.Error <- fmt.Errorf("set read deadline: %w", err)
-			return
+			err = fmt.Errorf("set read deadline: %w", err)
+			req.Error <- err
+			return err
 		}
 	}
 	req.Error <- scanner.Err()
+	return scanner.Err()
 }
 
 func (d *Device) handleControl() {
@@ -530,7 +541,9 @@ func (d *Device) handleControl() {
 		select {
 		case req := <-d.execute:
 			d.log(true).Println("[control   ] write", Encode(req.Packet))
-			d.exec(d.control, scanner, req)
+			if err = d.exec(d.control, scanner, req); err != nil {
+				return
+			}
 		case <-time.After(5 * time.Second):
 			req := request{
 				Packet:   Packet{Command: "ping"},
@@ -538,7 +551,9 @@ func (d *Device) handleControl() {
 				Error:    make(chan error, 1),
 			}
 			d.log(true).Println("[control   ] ping")
-			d.exec(d.control, scanner, req)
+			if err = d.exec(d.control, scanner, req); err != nil {
+				return
+			}
 			select {
 			case <-req.Response:
 			case err = <-req.Error:
