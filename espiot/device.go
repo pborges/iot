@@ -95,6 +95,10 @@ func (d Device) Model() string {
 	return d.metadata.model
 }
 
+func (d Device) Name() string {
+	return d.GetString("config.name")
+}
+
 func (d *Device) Set(attr string, value interface{}) error {
 	return d.set(attr, value, false)
 }
@@ -136,11 +140,11 @@ func (d *Device) SetIntegerOnDisconnect(attr string, value int) error {
 }
 
 func (d *Device) SetDouble(attr string, value float64) error {
-	return d.Set(attr, strconv.FormatFloat(value, 'E', 4, 64))
+	return d.Set(attr, strconv.FormatFloat(value, 'f', 4, 64))
 }
 
 func (d *Device) SetDoubleOnDisconnect(attr string, value float64) error {
-	return d.SetOnDisconnect(attr, strconv.FormatFloat(value, 'E', 4, 64))
+	return d.SetOnDisconnect(attr, strconv.FormatFloat(value, 'f', 4, 64))
 }
 
 func (d *Device) Get(attr string) interface{} {
@@ -191,7 +195,7 @@ func (d *Device) Exec(req Packet) ([]Packet, error) {
 	}
 	select {
 	case d.execute <- request:
-	case <-time.After(1 * time.Second):
+	case <-time.After(3 * time.Second):
 		return nil, errors.New("unavailable")
 	}
 	select {
@@ -208,6 +212,10 @@ func (d *Device) Exec(req Packet) ([]Packet, error) {
 }
 
 func (d *Device) Connect() error {
+	if d.connected {
+		// already connected
+		return nil
+	}
 	if d.Address == "" {
 		return errors.New("address cannot be nil")
 	}
@@ -484,8 +492,8 @@ func (d Device) log(verbose bool) *log.Logger {
 }
 
 func (d *Device) exec(conn net.Conn, scanner *bufio.Scanner, req request) error {
-	writeTimeout := 1 * time.Second
-	readTimeout := 1 * time.Second
+	writeTimeout := 2 * time.Second
+	readTimeout := 2 * time.Second
 
 	if err := conn.SetWriteDeadline(time.Now().Add(writeTimeout)); err != nil {
 		err = fmt.Errorf("set write deadline: %w", err)
@@ -564,7 +572,7 @@ func (d *Device) handleControl() {
 }
 
 func (d *Device) handleUpdates() {
-	readTimeout := 6 * time.Second
+	readTimeout := 7 * time.Second
 	d.log(true).Println("[update    ] open")
 	var err error
 	defer func() {

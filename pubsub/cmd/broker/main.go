@@ -12,10 +12,79 @@ import (
 	"time"
 )
 
+func discoverAndHandle(broker *pubsub.Broker) {
+	log.SetOutput(os.Stdout)
+	log.SetPrefix("[main      ]")
+	log.SetFlags(log.LstdFlags | log.Lshortfile)
+
+	discovered, err := espiot.Discover("192.168.1.0/24")
+	if err != nil {
+		log.Println(err)
+	}
+
+	devs := make(map[string]*espiot.Device)
+	for _, dev := range discovered {
+		dev := dev
+		log.Printf("Discovered addr:'%s' id:'%s' fw:'%s' hw:'%s' model:'%s' name:'%s'\n", dev.Address, dev.Id(), dev.FrameworkVersion(), dev.HardwareVersion(), dev.Model(), dev.GetString("config.name"))
+		dev.AlwaysReconnect = true
+		name := dev.Id()
+		dev.Log = log.New(os.Stdout, fmt.Sprintf("[%s]", name), log.LstdFlags)
+
+		if dev.Name() == "test" {
+			devs[dev.Id()] = dev
+		}
+	}
+
+	for k := range devs {
+		dev := devs[k]
+		node := pubsub.BasicNode{
+			ID: dev.Id(),
+		}
+		for _, a := range dev.ListAttributes() {
+			var attr pubsub.Attribute
+			attr.Name = a.AttributeDef().Name
+			switch a.(type) {
+			case *espiot.StringAttributeValue:
+				attr.Definition = pubsub.StringDefinition{AcceptFn: func(v string) error {
+					return dev.SetString(attr.Name, v)
+				}}
+			case *espiot.IntegerAttributeValue:
+				attr.Definition = pubsub.IntegerDefinition{AcceptFn: func(v int64) error {
+					return dev.SetInteger(attr.Name, int(v))
+				}}
+			case *espiot.DoubleAttributeValue:
+				attr.Definition = pubsub.DoubleDefinition{AcceptFn: func(v float64) error {
+					return dev.SetDouble(attr.Name, v)
+				}}
+			case *espiot.BooleanAttributeValue:
+				attr.Definition = pubsub.BooleanDefinition{AcceptFn: func(v bool) error {
+					return dev.SetBool(attr.Name, v)
+				}}
+			}
+			node.Attributes = append(node.Attributes, attr)
+		}
+
+		dev.OnUpdate(func(v espiot.AttributeAndValue) {
+			id := fmt.Sprintf("%s.%s", dev.Id(), v.AttributeDef().Name)
+			if err := broker.Publish(node, id, v.InspectValue()); err != nil {
+				log.Println("error publishing", id, v.InspectValue(), err)
+			}
+		})
+
+		if err := broker.Register(node); err != nil {
+			log.Println("error registering node", node.ID, err)
+		}
+
+		dev.Connect()
+	}
+}
+
 func main() {
 	broker := &pubsub.Broker{
 		Log: log.New(os.Stdout, "[BROKER] ", log.LstdFlags),
 	}
+
+	go discoverAndHandle(broker)
 
 	ln, err := net.Listen("tcp", ":5000")
 	if err != nil {
