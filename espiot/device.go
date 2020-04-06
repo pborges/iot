@@ -62,13 +62,14 @@ type Device struct {
 
 	attributes map[string]AttributeAndValue
 	functions  map[string]Function
+	lock       sync.RWMutex
 
 	connected    bool
 	execute      chan request
 	wg           sync.WaitGroup
 	onConnect    func()
 	onDisconnect func()
-	onUpdate     func(AttributeAndValue)
+	onUpdate     func(*Device, AttributeAndValue)
 	control      net.Conn
 	update       net.Conn
 }
@@ -148,18 +149,24 @@ func (d *Device) SetDoubleOnDisconnect(attr string, value float64) error {
 }
 
 func (d *Device) Get(attr string) interface{} {
+	d.lock.RLock()
+	defer d.lock.RUnlock()
 	if a, ok := d.attributes[attr]; ok {
 		return a.Interface()
 	}
 	return nil
 }
 func (d *Device) GetString(attr string) string {
+	d.lock.RLock()
+	defer d.lock.RUnlock()
 	if a, ok := d.attributes[attr]; ok {
 		return a.(*StringAttributeValue).Value
 	}
 	return ""
 }
 func (d *Device) GetBool(attr string) bool {
+	d.lock.RLock()
+	defer d.lock.RUnlock()
 	if a, ok := d.attributes[attr]; ok {
 		return a.(*BooleanAttributeValue).Value
 	}
@@ -167,12 +174,16 @@ func (d *Device) GetBool(attr string) bool {
 }
 
 func (d *Device) GetInteger(attr string) int {
+	d.lock.RLock()
+	defer d.lock.RUnlock()
 	if a, ok := d.attributes[attr]; ok {
 		return a.(*IntegerAttributeValue).Value
 	}
 	return 0
 }
 func (d *Device) GetDouble(attr string) float64 {
+	d.lock.RLock()
+	defer d.lock.RUnlock()
 	if a, ok := d.attributes[attr]; ok {
 		return a.(*DoubleAttributeValue).Value
 	}
@@ -195,8 +206,8 @@ func (d *Device) Exec(req Packet) ([]Packet, error) {
 	}
 	select {
 	case d.execute <- request:
-	case <-time.After(3 * time.Second):
-		return nil, errors.New("unavailable")
+	case <-time.After(5 * time.Second):
+		return nil, errors.New("exec request timeout")
 	}
 	select {
 	case res := <-request.Response:
@@ -247,14 +258,14 @@ func (d *Device) Connect() error {
 
 	if d.onConnect != nil {
 		d.log(false).Println("connect")
-		d.onConnect()
+		go d.onConnect()
 	}
 	go func() {
 		d.wg.Wait()
 		d.connected = false
 		if d.onDisconnect != nil {
 			d.log(false).Println("disconnect")
-			d.onDisconnect()
+			go d.onDisconnect()
 		}
 		if d.AlwaysReconnect {
 			d.log(false).Println("reconnecting...")
@@ -285,7 +296,7 @@ func (d *Device) OnConnect(fn func()) {
 		}
 	}
 	if d.connected {
-		fn()
+		go fn()
 	}
 }
 
@@ -296,29 +307,33 @@ func (d *Device) OnDisconnect(fn func()) {
 		existing := d.onDisconnect
 		d.onDisconnect = func() {
 			existing()
-			fn()
+			go fn()
 		}
 	}
 }
 
-func (d *Device) OnUpdate(fn func(AttributeAndValue)) {
+func (d *Device) OnUpdate(fn func(*Device, AttributeAndValue)) {
 	if d.onUpdate == nil {
 		d.onUpdate = fn
 	} else {
 		existing := d.onUpdate
-		d.onUpdate = func(a AttributeAndValue) {
-			existing(a)
-			fn(a)
+		d.onUpdate = func(d *Device, a AttributeAndValue) {
+			existing(d, a)
+			fn(d, a)
 		}
 	}
 	if d.connected {
+		d.lock.RLock()
 		for _, a := range d.attributes {
-			fn(a)
+			go fn(d, a)
 		}
+		d.lock.RUnlock()
 	}
 }
 
 func (d *Device) ListAttributes() []AttributeAndValue {
+	d.lock.RLock()
+	defer d.lock.RUnlock()
 	attrs := make([]AttributeAndValue, 0, len(d.attributes))
 	for _, v := range d.attributes {
 		attrs = append(attrs, v)
@@ -327,6 +342,8 @@ func (d *Device) ListAttributes() []AttributeAndValue {
 }
 
 func (d *Device) ListFunctions() []Function {
+	d.lock.RLock()
+	defer d.lock.RUnlock()
 	fns := make([]Function, 0, len(d.functions))
 	for _, v := range d.functions {
 		fns = append(fns, v)
@@ -353,6 +370,8 @@ func (d *Device) init() error {
 }
 
 func (d *Device) handleList(res []Packet) (err error) {
+	d.lock.Lock()
+	defer d.lock.Unlock()
 	if d.attributes == nil {
 		d.attributes = make(map[string]AttributeAndValue)
 	}
@@ -390,7 +409,7 @@ func (d *Device) handleList(res []Packet) (err error) {
 				return err
 			}
 			if d.onUpdate != nil {
-				d.onUpdate(d.attributes[r.Args["name"]])
+				d.onUpdate(d, d.attributes[r.Args["name"]])
 			}
 
 		} else if strings.HasPrefix(r.Command, "func") {
@@ -456,6 +475,8 @@ func (d *Device) setMetadata(p Packet) (err error) {
 }
 
 func (d *Device) set(attr string, value interface{}, disconnect bool) error {
+	d.lock.Lock()
+	defer d.lock.Unlock()
 	if _, ok := d.attributes[attr]; !ok {
 		return errors.New("unknown attribute")
 	}
@@ -572,6 +593,7 @@ func (d *Device) handleControl() {
 }
 
 func (d *Device) handleUpdates() {
+
 	readTimeout := 7 * time.Second
 	d.log(true).Println("[update    ] open")
 	var err error
@@ -601,15 +623,8 @@ func (d *Device) handleUpdates() {
 
 		switch packet.Command {
 		case "attr":
-			if a, ok := d.attributes[packet.Args["name"]]; ok {
-				if err = a.accept(packet.Args["value"]); err != nil {
-					err = fmt.Errorf("error: update parse int %s %w", packet.Args["value"], err)
-					return
-				} else if d.onUpdate != nil {
-					d.onUpdate(a)
-				}
-			} else {
-				err = errors.New("error: update unknown attribute " + packet.Args["name"])
+			err = d.handleUpdate(packet.Args["name"], packet.Args["value"])
+			if err != nil {
 				return
 			}
 		}
@@ -619,6 +634,21 @@ func (d *Device) handleUpdates() {
 		}
 	}
 	err = scanner.Err()
+}
+
+func (d *Device) handleUpdate(name string, value string) error {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+	if a, ok := d.attributes[name]; ok {
+		if err := a.accept(value); err != nil {
+			return fmt.Errorf("error: update parse int %s %w", value, err)
+		} else if d.onUpdate != nil {
+			go d.onUpdate(d, a)
+		}
+	} else {
+		return errors.New("error: update unknown attribute " + name)
+	}
+	return nil
 }
 
 func (d *Device) dial() (err error) {
